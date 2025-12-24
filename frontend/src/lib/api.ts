@@ -4,6 +4,11 @@ export type Task = {
     id: number
     title: string
     description: string | null
+    category: string | null
+    labels: string[]
+    assignee: string | null
+    start_date: string | null
+    estimated_minutes: number | null
     due_date: string | null
     priority: 1 | 2 | 3
     created_at: string
@@ -15,6 +20,11 @@ export type Task = {
 export type TaskCreate = {
     title: string
     description?: string
+    category?: string | null
+    labels?: string[]
+    assignee?: string | null
+    start_date?: string | null
+    estimated_minutes?: number | null
     due_date?: string
     priority?: 1 | 2 | 3
 }
@@ -22,6 +32,11 @@ export type TaskCreate = {
 export type TaskUpdate = {
     title?: string
     description?: string | null
+    category?: string | null
+    labels?: string[]
+    assignee?: string | null
+    start_date?: string | null
+    estimated_minutes?: number | null
     due_date?: string | null
     priority?: 1 | 2 | 3
     completed?: boolean

@@ -50,12 +50,10 @@ export function DashboardPage() {
                 </div>
             </div>
 
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-5">
-                <div className="flex items-center justify-between gap-4">
-                    <div>
-                        <div className="text-sm font-semibold">Today’s tasks</div>
-                        <div className="mt-1 text-xs text-zinc-400">Your to-do list is the hero.</div>
-                    </div>
+            <section>
+                <div>
+                    <div className="text-sm font-semibold">Today’s tasks</div>
+                    <div className="mt-1 text-xs text-zinc-400">Your to-do list is the hero.</div>
                 </div>
 
                 <div className="mt-4 space-y-2">

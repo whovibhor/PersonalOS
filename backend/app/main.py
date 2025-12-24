@@ -8,6 +8,7 @@ from .models import Base
 from .models import expense as _expense_model  # ensure model is registered
 from .models import habit as _habit_model  # ensure model is registered
 from .models import task as _task_model  # ensure model is registered
+from .models import task_history as _task_history_model  # ensure model is registered
 
 app = FastAPI(title=settings.app_name)
 

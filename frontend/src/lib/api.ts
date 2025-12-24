@@ -12,7 +12,6 @@ export type Task = {
     recurrence: TaskRecurrence
     completed_on: string | null
     start_date: string | null
-    estimated_minutes: number | null
     due_date: string | null
     priority: 1 | 2 | 3
     created_at: string
@@ -29,7 +28,6 @@ export type TaskCreate = {
     assignee?: string | null
     recurrence?: TaskRecurrence
     start_date?: string | null
-    estimated_minutes?: number | null
     due_date?: string
     priority?: 1 | 2 | 3
 }
@@ -42,10 +40,20 @@ export type TaskUpdate = {
     assignee?: string | null
     recurrence?: TaskRecurrence
     start_date?: string | null
-    estimated_minutes?: number | null
     due_date?: string | null
     priority?: 1 | 2 | 3
     completed?: boolean
+}
+
+export type TaskHistoryAction = 'created' | 'updated' | 'deleted' | 'completed' | 'uncompleted'
+
+export type TaskHistory = {
+    id: number
+    task_id: number
+    action: TaskHistoryAction
+    task_title: string
+    changes: string | null
+    created_at: string
 }
 
 export type Habit = {
@@ -130,6 +138,10 @@ export async function updateTask(taskId: number, payload: TaskUpdate) {
 
 export async function deleteTask(taskId: number) {
     return api<void>(`/api/tasks/${taskId}`, { method: 'DELETE' })
+}
+
+export async function getTaskHistory(limit = 50) {
+    return api<TaskHistory[]>(`/api/task-history?limit=${limit}`)
 }
 
 export async function listHabits() {

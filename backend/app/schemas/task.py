@@ -17,7 +17,6 @@ class TaskCreate(BaseModel):
     assignee: str | None = Field(default=None, max_length=100)
     recurrence: TaskRecurrence = "none"
     start_date: date | None = None
-    estimated_minutes: int | None = Field(default=None, ge=1, le=1440)
     due_date: date | None = None
     priority: int = Field(default=2, ge=1, le=3)
 
@@ -30,7 +29,6 @@ class TaskUpdate(BaseModel):
     assignee: str | None = Field(default=None, max_length=100)
     recurrence: TaskRecurrence | None = None
     start_date: date | None = None
-    estimated_minutes: int | None = Field(default=None, ge=1, le=1440)
     due_date: date | None = None
     priority: int | None = Field(default=None, ge=1, le=3)
     completed: bool | None = None
@@ -48,7 +46,6 @@ class TaskOut(BaseModel):
     recurrence: TaskRecurrence
     completed_on: date | None = None
     start_date: date | None
-    estimated_minutes: int | None
     due_date: date | None
     priority: int
     created_at: datetime

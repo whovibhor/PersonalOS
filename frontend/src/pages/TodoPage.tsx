@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Modal } from '../components/Modal'
-import { createTask, deleteTask, listTasks, updateTask } from '../lib/api'
-import type { Task } from '../lib/api'
+import { createTask, deleteTask, getTaskHistory, listTasks, updateTask } from '../lib/api'
+import type { Task, TaskHistory } from '../lib/api'
 
 type EditState = {
     id: number
@@ -13,12 +13,11 @@ type EditState = {
     assignee: string
     recurrence: 'none' | 'daily' | 'weekly' | 'monthly'
     startDate: string
-    estimatedMinutes: string
     dueDate: string
     priority: 1 | 2 | 3
 }
 
-type DateMode = 'today' | 'week' | 'custom'
+type DateMode = 'today' | 'week' | 'next30days' | 'custom'
 type ViewMode = 'list' | 'calendar' | 'board'
 
 type StatusFilter = 'all' | 'pending' | 'completed'
@@ -44,7 +43,7 @@ function toneFor(s: string) {
 
 function tagClass(name: string, selected: boolean) {
     const base = TAG_STYLES[toneFor(name)]
-    return `rounded-full border px-3 py-1 text-xs transition ${base} ${selected ? 'ring-1 ring-zinc-600' : 'opacity-80 hover:opacity-100'}`
+    return `rounded-full border px-3 py-1 text-xs transition ${base} ${selected ? 'ring-1 ring-zinc-600' : 'opacity-80'}`
 }
 
 function DateInput({
@@ -57,18 +56,26 @@ function DateInput({
     inputClassName: string
 }) {
     const empty = !value
+    const inputRef = useRef<HTMLInputElement>(null)
+
     return (
         <div className="relative">
             {empty ? (
-                <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-zinc-500">
-                    DD-MM-YYYY
-                </div>
+                <button
+                    type="button"
+                    onClick={() => inputRef.current?.showPicker()}
+                    className="absolute inset-0 flex items-center px-3 text-sm text-zinc-400 hover:text-zinc-300 transition-colors z-10"
+                >
+                    Select Date
+                </button>
             ) : null}
             <input
+                ref={inputRef}
                 type="date"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className={`${inputClassName} ${empty ? 'text-transparent' : ''}`}
+                className={`${inputClassName} ${empty ? 'opacity-0' : ''}`}
+                style={empty ? { visibility: 'hidden' } : undefined}
             />
         </div>
     )
@@ -132,14 +139,6 @@ function removeLabel(list: string[], label: string) {
     return list.filter((x) => x.toLowerCase() !== lower)
 }
 
-function fmtEstimate(mins: number | null) {
-    if (!mins || mins <= 0) return null
-    if (mins < 60) return `${mins}m`
-    const h = Math.floor(mins / 60)
-    const m = mins % 60
-    return m === 0 ? `${h}h` : `${h}h ${m}m`
-}
-
 function IconPencil({ className }: { className?: string }) {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
@@ -163,6 +162,14 @@ function IconTrash({ className }: { className?: string }) {
             <path d="M3 6h18" />
             <path d="M8 6V4h8v2" />
             <path d="M6 6l1 16h10l1-16" />
+        </svg>
+    )
+}
+
+function IconHistory({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     )
 }
@@ -231,7 +238,6 @@ export function TodoPage() {
     const [editing, setEditing] = useState<EditState | null>(null)
 
     const [dateMode, setDateMode] = useState<DateMode>('today')
-    const [customDate, setCustomDate] = useState(formatToday())
     const [viewMode, setViewMode] = useState<ViewMode>('list')
     const [query, setQuery] = useState('')
 
@@ -276,6 +282,10 @@ export function TodoPage() {
     const [selectedId, setSelectedId] = useState<number | null>(null)
     const [detailTask, setDetailTask] = useState<Task | null>(null)
 
+    const [historyOpen, setHistoryOpen] = useState(false)
+    const [history, setHistory] = useState<TaskHistory[]>([])
+    const [loadingHistory, setLoadingHistory] = useState(false)
+
     const [addOpen, setAddOpen] = useState(false)
     const [addTitle, setAddTitle] = useState('')
     const [addCategory, setAddCategory] = useState('')
@@ -283,7 +293,6 @@ export function TodoPage() {
     const [addLabelInput, setAddLabelInput] = useState('')
     const [editLabelInput, setEditLabelInput] = useState('')
     const [addStartDate, setAddStartDate] = useState('')
-    const [addEstimatedMinutes, setAddEstimatedMinutes] = useState('')
     const [addDueDate, setAddDueDate] = useState('')
     const [addPriority, setAddPriority] = useState<1 | 2 | 3>(2)
     const [addAssignee, setAddAssignee] = useState<(typeof ASSIGNEE_OPTIONS)[number]>('Self')
@@ -292,7 +301,7 @@ export function TodoPage() {
 
     const [nowMs, setNowMs] = useState(() => Date.now())
 
-    async function reload() {
+    const reload = useCallback(async () => {
         setLoading(true)
         setError(null)
         try {
@@ -303,7 +312,7 @@ export function TodoPage() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
     useEffect(() => {
         void reload()
@@ -331,6 +340,30 @@ export function TodoPage() {
         localStorage.setItem('todo-label-filter', JSON.stringify(labelFilter))
     }, [labelFilter])
 
+    // Auto-close edit widget when scrolled out of view
+    const editRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (!editing || !editRef.current) return
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) {
+                        setEditing(null)
+                    }
+                })
+            },
+            { threshold: 0.1 }
+        )
+
+        observer.observe(editRef.current)
+
+        return () => {
+            observer.disconnect()
+        }
+    }, [editing])
+
     function startEdit(t: Task) {
         setEditLabelInput('')
         setEditing({
@@ -342,7 +375,6 @@ export function TodoPage() {
             assignee: (t.assignee ?? '').trim(),
             recurrence: t.recurrence ?? 'none',
             startDate: t.start_date ?? '',
-            estimatedMinutes: t.estimated_minutes != null ? String(t.estimated_minutes) : '',
             dueDate: t.due_date ?? '',
             priority: t.priority,
         })
@@ -378,10 +410,6 @@ export function TodoPage() {
                 assignee: editing.assignee.trim().length > 0 ? editing.assignee.trim() : null,
                 recurrence: editing.recurrence,
                 start_date: editing.startDate.trim().length > 0 ? editing.startDate : null,
-                estimated_minutes:
-                    editing.estimatedMinutes.trim().length > 0
-                        ? Number(editing.estimatedMinutes)
-                        : null,
                 due_date: editing.dueDate.trim().length > 0 ? editing.dueDate : null,
                 priority: editing.priority,
             })
@@ -440,10 +468,6 @@ export function TodoPage() {
         const title = addTitle.trim()
         if (!title) return
 
-        const est = addEstimatedMinutes.trim().length > 0 ? Number(addEstimatedMinutes) : null
-        const estValid = est == null || (Number.isFinite(est) && est > 0)
-        if (!estValid) return
-
         setLoading(true)
         setError(null)
         try {
@@ -457,14 +481,12 @@ export function TodoPage() {
                 assignee: addAssignee.trim().length > 0 ? addAssignee : undefined,
                 recurrence: addRecurrence,
                 start_date: addStartDate.trim().length > 0 ? addStartDate : undefined,
-                estimated_minutes: est != null ? est : undefined,
             })
             setAddTitle('')
             setAddCategory('')
             setAddLabels([])
             setAddLabelInput('')
             setAddStartDate('')
-            setAddEstimatedMinutes('')
             setAddDueDate('')
             setAddPriority(2)
             setAddAssignee('Self')
@@ -483,19 +505,21 @@ export function TodoPage() {
 
     // Reusable filter helpers
     const taskMatchesDateMode = useMemo(() => {
-        return (t: Task, mode: DateMode, customDay: string, todayDay: string) => {
+        return (t: Task, mode: DateMode, todayDay: string) => {
             const hasRecurrence = t.recurrence && t.recurrence !== 'none'
 
             if (hasRecurrence) {
                 if (mode === 'today') return isActiveInRange(t, todayDay, todayDay)
-                if (mode === 'custom') return isActiveInRange(t, customDay, customDay)
-                return isActiveInRange(t, todayDay, addDays(todayDay, 6))
+                if (mode === 'next30days') return isActiveInRange(t, todayDay, addDays(todayDay, 29))
+                if (mode === 'week') return isActiveInRange(t, todayDay, addDays(todayDay, 6))
+                return true // 'custom' = all time
             }
 
             const due = t.due_date
             if (mode === 'today') return due == null || due <= todayDay
-            if (mode === 'custom') return due != null && due === customDay
-            return due != null && due >= todayDay && due <= addDays(todayDay, 6)
+            if (mode === 'next30days') return due != null && due >= todayDay && due <= addDays(todayDay, 29)
+            if (mode === 'week') return due != null && due >= todayDay && due <= addDays(todayDay, 6)
+            return true // 'custom' = all time
         }
     }, [])
 
@@ -545,11 +569,11 @@ export function TodoPage() {
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase()
-        const completionDay = dateMode === 'custom' ? customDate : today
+        const completionDay = today
 
         return tasks
             .filter((t) => {
-                if (!taskMatchesDateMode(t, dateMode, customDate, today)) return false
+                if (!taskMatchesDateMode(t, dateMode, today)) return false
                 return taskMatchesFilters(t, q, completionDay)
             })
             .sort((a, b) => {
@@ -564,14 +588,14 @@ export function TodoPage() {
 
                 return b.created_at.localeCompare(a.created_at)
             })
-    }, [tasks, dateMode, customDate, today, query, taskMatchesDateMode, taskMatchesFilters])
+    }, [tasks, dateMode, today, query, taskMatchesDateMode, taskMatchesFilters])
 
     const insights = useMemo(() => {
         const q = query.trim().toLowerCase()
-        const completionDay = dateMode === 'custom' ? customDate : today
+        const completionDay = today
 
         const visibleMain = tasks.filter((t) => {
-            if (!taskMatchesDateMode(t, dateMode, customDate, today)) return false
+            if (!taskMatchesDateMode(t, dateMode, today)) return false
             return taskMatchesFilters(t, q, completionDay)
         })
 
@@ -604,7 +628,7 @@ export function TodoPage() {
             pendingToday: pending,
             pct,
         }
-    }, [tasks, dateMode, customDate, today, query, statusFilter, taskMatchesDateMode, taskMatchesFilters])
+    }, [tasks, dateMode, today, query, statusFilter, taskMatchesDateMode, taskMatchesFilters])
 
     const upcomingPanel = useMemo(() => {
         return tasks
@@ -723,7 +747,7 @@ export function TodoPage() {
                             onClick={() => {
                                 setDateMode('today')
                             }}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${dateMode === 'today' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${dateMode === 'today' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
                             Today
                         </button>
@@ -732,48 +756,49 @@ export function TodoPage() {
                             onClick={() => {
                                 setDateMode('week')
                             }}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${dateMode === 'week' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${dateMode === 'week' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
                             This Week
                         </button>
                         <button
                             type="button"
                             onClick={() => {
+                                setDateMode('next30days')
+                            }}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${dateMode === 'next30days' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
+                        >
+                            Next 30 Days
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
                                 setDateMode('custom')
                             }}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${dateMode === 'custom' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${dateMode === 'custom' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
-                            Custom
+                            All Time
                         </button>
                     </div>
-
-                    {dateMode === 'custom' ? (
-                        <DateInput
-                            value={customDate}
-                            onChange={setCustomDate}
-                            inputClassName="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-                        />
-                    ) : null}
 
                     <div className="flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-900/10 p-1">
                         <button
                             type="button"
                             onClick={() => setViewMode('list')}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${viewMode === 'list' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${viewMode === 'list' ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
                             List
                         </button>
                         <button
                             type="button"
                             onClick={() => setViewMode('calendar')}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${viewMode === 'calendar' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${viewMode === 'calendar' ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
                             Calendar
                         </button>
                         <button
                             type="button"
                             onClick={() => setViewMode('board')}
-                            className={`rounded-full px-3 py-1.5 text-sm transition ${viewMode === 'board' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-all ${viewMode === 'board' ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
                         >
                             Board
                         </button>
@@ -785,13 +810,33 @@ export function TodoPage() {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Search tasks…"
-                        className="h-10 w-[min(360px,90vw)] rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm outline-none focus:border-zinc-600"
+                        className="h-10 w-[min(360px,90vw)] rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                     />
 
                     <button
                         type="button"
+                        onClick={async () => {
+                            setHistoryOpen(true)
+                            setLoadingHistory(true)
+                            try {
+                                const data = await getTaskHistory(100)
+                                setHistory(data)
+                            } catch (e) {
+                                console.error('Failed to load history:', e)
+                            } finally {
+                                setLoadingHistory(false)
+                            }
+                        }}
+                        className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-700/50 bg-zinc-900 text-zinc-400 transition-all hover:bg-zinc-800 hover:border-blue-500/40 hover:text-blue-400"
+                        title="View history"
+                    >
+                        <IconHistory className="h-4 w-4" />
+                    </button>
+
+                    <button
+                        type="button"
                         onClick={() => setAddOpen(true)}
-                        className="h-10 rounded-lg border border-emerald-600/40 bg-emerald-600/15 px-3 text-sm text-emerald-100 transition hover:bg-emerald-600/20"
+                        className="h-10 rounded-lg border border-emerald-500/40 bg-gradient-to-r from-emerald-600/20 to-emerald-500/20 px-3 text-sm text-emerald-100 transition-all hover:from-emerald-600/30 hover:to-emerald-500/30 hover:border-emerald-400/60 hover:shadow-sm"
                     >
                         + Add Task
                     </button>
@@ -805,7 +850,7 @@ export function TodoPage() {
                     <div className="space-y-3">
                         <div>
                             <div className="mb-2 text-xs font-medium text-zinc-400">Filters</div>
-                            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-2">
+                            <div className="rounded-2xl border border-zinc-700/50 bg-zinc-900/10 p-2">
                                 <div className="space-y-3 p-2">
                                     <div>
                                         <label className="text-xs text-zinc-400">Status</label>
@@ -813,7 +858,7 @@ export function TodoPage() {
                                             <select
                                                 value={draftStatusFilter}
                                                 onChange={(e) => setDraftStatusFilter(e.target.value as StatusFilter)}
-                                                className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                                className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                             >
                                                 <option value="all">All</option>
                                                 <option value="pending">Pending</option>
@@ -833,7 +878,7 @@ export function TodoPage() {
                                                 onClick={() => setDraftCategoryFilter('all')}
                                                 className={`rounded-full border px-3 py-1 text-xs transition ${draftCategoryFilter === 'all'
                                                     ? 'border-zinc-600 bg-zinc-800 text-zinc-50 ring-1 ring-zinc-600'
-                                                    : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900'
+                                                    : 'border-zinc-800 bg-zinc-950 text-zinc-300'
                                                     }`}
                                             >
                                                 All
@@ -860,7 +905,7 @@ export function TodoPage() {
                                                     const v = e.target.value
                                                     setDraftPriorityFilter(v === 'any' ? 'any' : (Number(v) as 1 | 2 | 3))
                                                 }}
-                                                className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                                className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                             >
                                                 <option value="any">Any</option>
                                                 <option value={1}>Low</option>
@@ -914,7 +959,7 @@ export function TodoPage() {
                                                 setPriorityFilter('any')
                                                 setLabelFilter([])
                                             }}
-                                            className="h-10 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 text-sm text-rose-200 transition hover:bg-rose-500/15"
+                                            className="h-10 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 text-sm text-rose-200 transition-all hover:bg-rose-500/20 hover:border-rose-400/50"
                                         >
                                             Clear
                                         </button>
@@ -926,7 +971,7 @@ export function TodoPage() {
                                                 setPriorityFilter(draftPriorityFilter)
                                                 setLabelFilter(draftLabelFilter)
                                             }}
-                                            className="h-10 rounded-lg border border-emerald-600/40 bg-emerald-600/15 px-3 text-sm text-emerald-100 transition hover:bg-emerald-600/20"
+                                            className="h-10 rounded-lg border border-emerald-500/40 bg-emerald-600/15 px-3 text-sm text-emerald-100 transition-all hover:bg-emerald-600/25 hover:border-emerald-400/60"
                                         >
                                             Apply
                                         </button>
@@ -942,8 +987,8 @@ export function TodoPage() {
                         <div className="space-y-2">
                             {(() => {
                                 const days: { date: string; label: string; tasks: Task[] }[] = []
-                                const startDate = dateMode === 'custom' ? customDate : dateMode === 'today' ? today : today
-                                const range = dateMode === 'week' ? 7 : dateMode === 'custom' ? 1 : 7
+                                const startDate = today
+                                const range = dateMode === 'week' ? 7 : dateMode === 'next30days' ? 30 : 7
 
                                 for (let i = 0; i < range; i++) {
                                     const d = addDays(startDate, i)
@@ -978,7 +1023,7 @@ export function TodoPage() {
                                                         key={t.id}
                                                         type="button"
                                                         onClick={() => void openDetails(t)}
-                                                        className={`group flex w-full items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left transition hover:bg-zinc-900 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
+                                                        className={`group flex w-full items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left transition ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
                                                     >
                                                         <div className={`h-2 w-2 shrink-0 rounded-full ${priorityDot(t.priority)}`} />
                                                         <div className={`min-w-0 flex-1 truncate text-sm ${isCompletedOn(t, day.date) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
@@ -1015,7 +1060,7 @@ export function TodoPage() {
                                                 key={t.id}
                                                 type="button"
                                                 onClick={() => void openDetails(t)}
-                                                className={`block w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left text-sm transition hover:bg-zinc-900 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
+                                                className={`block w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
                                             >
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div className="truncate text-zinc-100">{t.title}</div>
@@ -1051,7 +1096,7 @@ export function TodoPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => void toggleComplete(t)}
-                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out active:scale-95`}
                                                     aria-label="Toggle complete"
                                                 />
 
@@ -1075,7 +1120,7 @@ export function TodoPage() {
                                                             : ''}
                                                 </div>
 
-                                                <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
+                                                <div className="shrink-0 items-center gap-2 flex">
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -1083,7 +1128,7 @@ export function TodoPage() {
                                                             void startEditById(t.id)
                                                         }}
                                                         aria-label="Edit"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconPencil className="h-4 w-4" />
                                                     </button>
@@ -1094,7 +1139,7 @@ export function TodoPage() {
                                                             void markDone(t)
                                                         }}
                                                         aria-label="Mark as done"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out hover:scale-105 hover:bg-emerald-600/15 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconCheck className="h-4 w-4" />
                                                     </button>
@@ -1105,7 +1150,7 @@ export function TodoPage() {
                                                             void remove(t)
                                                         }}
                                                         aria-label="Delete"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-rose-500/15 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconTrash className="h-4 w-4" />
                                                     </button>
@@ -1117,7 +1162,7 @@ export function TodoPage() {
                             ) : null}
 
                             {dateMode === 'today' && ongoingToday.length > 0 ? (
-                                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
+                                <div className="rounded-2xl border border-zinc-700/50 bg-zinc-900/10 p-3">
                                     <div className="mb-2 text-xs font-medium text-zinc-400">Ongoing</div>
                                     <div className="space-y-2">
                                         {ongoingToday.map((t) => (
@@ -1128,7 +1173,7 @@ export function TodoPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => void toggleComplete(t)}
-                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out active:scale-95`}
                                                     aria-label="Toggle complete"
                                                 />
 
@@ -1144,11 +1189,6 @@ export function TodoPage() {
                                                         {t.category ? (
                                                             <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
                                                                 {t.category}
-                                                            </span>
-                                                        ) : null}
-                                                        {t.estimated_minutes != null ? (
-                                                            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
-                                                                {fmtEstimate(t.estimated_minutes)}
                                                             </span>
                                                         ) : null}
                                                     </div>
@@ -1173,7 +1213,7 @@ export function TodoPage() {
 
                                                 <div className="shrink-0 text-xs text-zinc-500">{t.due_date ? formatCountdown(t.due_date, nowMs) : ''}</div>
 
-                                                <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
+                                                <div className="shrink-0 items-center gap-2 flex">
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -1181,7 +1221,7 @@ export function TodoPage() {
                                                             void startEditById(t.id)
                                                         }}
                                                         aria-label="Edit"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconPencil className="h-4 w-4" />
                                                     </button>
@@ -1192,7 +1232,7 @@ export function TodoPage() {
                                                             void markDone(t)
                                                         }}
                                                         aria-label="Mark as done"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out hover:scale-105 hover:bg-emerald-600/15 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconCheck className="h-4 w-4" />
                                                     </button>
@@ -1203,7 +1243,7 @@ export function TodoPage() {
                                                             void remove(t)
                                                         }}
                                                         aria-label="Delete"
-                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-rose-500/15 active:scale-95"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out active:scale-95"
                                                     >
                                                         <IconTrash className="h-4 w-4" />
                                                     </button>
@@ -1217,7 +1257,8 @@ export function TodoPage() {
                             {listItems.map((t) => (
                                 <div
                                     key={t.id}
-                                    className={`group rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/20 active:translate-y-0 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
+                                    ref={editing?.id === t.id ? editRef : null}
+                                    className={`group rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4 transition-all duration-150 ease-out/20 active:translate-y-0 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
                                 >
                                     {editing?.id === t.id ? (
                                         <div className="space-y-3">
@@ -1298,42 +1339,48 @@ export function TodoPage() {
                                             </div>
 
                                             <div className="grid gap-2 md:grid-cols-12">
-                                                <div className="md:col-span-3">
+                                                <div className="md:col-span-4">
                                                     <label className="text-xs text-zinc-400">Due date</label>
-                                                    <DateInput
-                                                        value={editing.dueDate}
-                                                        onChange={(next) => setEditing({ ...editing, dueDate: next })}
-                                                        inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-                                                    />
+                                                    <div className="mt-1 flex gap-2">
+                                                        <DateInput
+                                                            value={editing.dueDate}
+                                                            onChange={(next) => setEditing({ ...editing, dueDate: next })}
+                                                            inputClassName="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditing({ ...editing, dueDate: formatToday() })}
+                                                            className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-xs text-zinc-300 transition"
+                                                        >
+                                                            Today
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div className="md:col-span-3">
+                                                <div className="md:col-span-4">
                                                     <label className="text-xs text-zinc-400">Start date</label>
-                                                    <DateInput
-                                                        value={editing.startDate}
-                                                        onChange={(next) => setEditing({ ...editing, startDate: next })}
-                                                        inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-                                                    />
-                                                </div>
-                                                <div className="md:col-span-3">
-                                                    <label className="text-xs text-zinc-400">Estimate (mins)</label>
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        max="1440"
-                                                        value={editing.estimatedMinutes}
-                                                        onChange={(e) => setEditing({ ...editing, estimatedMinutes: e.target.value })}
-                                                        placeholder="30"
-                                                        className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
-                                                    />
+                                                    <div className="mt-1 flex gap-2">
+                                                        <DateInput
+                                                            value={editing.startDate}
+                                                            onChange={(next) => setEditing({ ...editing, startDate: next })}
+                                                            inputClassName="flex-1 rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditing({ ...editing, startDate: formatToday() })}
+                                                            className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 text-xs text-blue-200 transition-all hover:bg-blue-500/20 hover:border-blue-400/50"
+                                                        >
+                                                            Today
+                                                        </button>
+                                                    </div>
                                                 </div>
 
-                                                <div className="md:col-span-3">
+                                                <div className="md:col-span-4">
                                                     <label className="text-xs text-zinc-400">Repeat</label>
                                                     <div className="relative mt-1">
                                                         <select
                                                             value={editing.recurrence}
                                                             onChange={(e) => setEditing({ ...editing, recurrence: e.target.value as 'none' | 'daily' | 'weekly' | 'monthly' })}
-                                                            className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                                            className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                                         >
                                                             <option value="none">None</option>
                                                             <option value="daily">Daily</option>
@@ -1353,9 +1400,9 @@ export function TodoPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => setEditing({ ...editing, category: '' })}
-                                                        className={`rounded-full border px-3 py-1 text-xs transition ${editing.category.trim().length === 0
-                                                            ? 'border-zinc-600 bg-zinc-800 text-zinc-50 ring-1 ring-zinc-600'
-                                                            : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900'
+                                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${editing.category.trim().length === 0
+                                                            ? 'border-violet-500/50 bg-violet-500/20 text-violet-100 ring-1 ring-violet-500/30'
+                                                            : 'border-zinc-700/50 bg-zinc-950 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
                                                             }`}
                                                     >
                                                         None
@@ -1402,7 +1449,7 @@ export function TodoPage() {
                                                                     labels: removeLabel(editing.labels, lab),
                                                                 })
                                                             }
-                                                            className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-900"
+                                                            className="rounded-full border border-zinc-700/50 bg-zinc-950 px-3 py-1 text-xs text-zinc-200 transition-all hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
                                                         >
                                                             {lab} ×
                                                         </button>
@@ -1420,7 +1467,7 @@ export function TodoPage() {
                                                         }
                                                     }}
                                                     placeholder="Type a label and press Enter…"
-                                                    className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
+                                                    className="mt-2 w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                                 />
                                             </div>
 
@@ -1428,7 +1475,7 @@ export function TodoPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => setEditing(null)}
-                                                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                                                    className="rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 transition-all hover:bg-zinc-900 hover:text-zinc-200"
                                                 >
                                                     Cancel
                                                 </button>
@@ -1436,7 +1483,7 @@ export function TodoPage() {
                                                     type="button"
                                                     disabled={loading || editing.title.trim().length === 0}
                                                     onClick={() => void saveEdit()}
-                                                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm transition hover:bg-zinc-800 disabled:opacity-60"
+                                                    className="rounded-lg border border-blue-500/40 bg-gradient-to-r from-blue-600/20 to-blue-500/20 px-3 py-2 text-sm text-blue-100 transition-all hover:from-blue-600/30 hover:to-blue-500/30 hover:border-blue-400/60 disabled:opacity-60 disabled:hover:from-blue-600/20 disabled:hover:to-blue-500/20"
                                                 >
                                                     Save
                                                 </button>
@@ -1450,7 +1497,7 @@ export function TodoPage() {
                                                     e.stopPropagation()
                                                     void toggleComplete(t)
                                                 }}
-                                                className={`mt-0.5 h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, dateMode === 'custom' ? customDate : today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                className={`mt-0.5 h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent hover:border-zinc-500'} transition-all duration-150 ease-out active:scale-95`}
                                                 aria-label="Toggle complete"
                                             />
 
@@ -1463,7 +1510,7 @@ export function TodoPage() {
                                             >
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <div
-                                                        className={`min-w-0 truncate text-sm font-medium ${isCompletedOn(t, dateMode === 'custom' ? customDate : today) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}
+                                                        className={`min-w-0 truncate text-sm font-medium ${isCompletedOn(t, today) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}
                                                     >
                                                         {t.title}
                                                     </div>
@@ -1472,26 +1519,20 @@ export function TodoPage() {
                                                         {t.status}
                                                     </span>
 
-                                                    <span className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+                                                    <span className="inline-flex items-center gap-2 rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
                                                         <span className={`h-2 w-2 rounded-full ${priorityDot(t.priority)}`} />
                                                         {priorityLabel(t.priority)}
                                                     </span>
 
                                                     {t.due_date ? (
-                                                        <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+                                                        <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
                                                             Due {t.due_date}
                                                         </span>
                                                     ) : null}
 
                                                     {t.category ? (
-                                                        <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+                                                        <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
                                                             {t.category}
-                                                        </span>
-                                                    ) : null}
-
-                                                    {t.estimated_minutes != null ? (
-                                                        <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
-                                                            {fmtEstimate(t.estimated_minutes)}
                                                         </span>
                                                     ) : null}
                                                 </div>
@@ -1501,13 +1542,13 @@ export function TodoPage() {
                                                         {t.labels.slice(0, 4).map((lab) => (
                                                             <span
                                                                 key={lab}
-                                                                className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300"
+                                                                className="rounded-full border border-zinc-700/50 bg-zinc-950 px-3 py-1 text-xs text-zinc-300"
                                                             >
                                                                 {lab}
                                                             </span>
                                                         ))}
                                                         {t.labels.length > 4 ? (
-                                                            <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-500">
+                                                            <span className="rounded-full border border-zinc-700/50 bg-zinc-950 px-3 py-1 text-xs text-zinc-500">
                                                                 +{t.labels.length - 4}
                                                             </span>
                                                         ) : null}
@@ -1519,7 +1560,7 @@ export function TodoPage() {
                                                 ) : null}
                                             </button>
 
-                                            <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
+                                            <div className="shrink-0 items-center gap-2 flex">
                                                 <button
                                                     type="button"
                                                     onClick={(e) => {
@@ -1527,7 +1568,7 @@ export function TodoPage() {
                                                         void startEditById(t.id)
                                                     }}
                                                     aria-label="Edit"
-                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
+                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out active:scale-95"
                                                 >
                                                     <IconPencil className="h-4 w-4" />
                                                 </button>
@@ -1538,7 +1579,7 @@ export function TodoPage() {
                                                         void markDone(t)
                                                     }}
                                                     aria-label="Mark as done"
-                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out hover:scale-105 hover:bg-emerald-600/15 active:scale-95"
+                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out active:scale-95"
                                                 >
                                                     <IconCheck className="h-4 w-4" />
                                                 </button>
@@ -1549,7 +1590,7 @@ export function TodoPage() {
                                                         void remove(t)
                                                     }}
                                                     aria-label="Delete"
-                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-rose-500/15 active:scale-95"
+                                                    className="grid h-10 w-10 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out active:scale-95"
                                                 >
                                                     <IconTrash className="h-4 w-4" />
                                                 </button>
@@ -1586,7 +1627,7 @@ export function TodoPage() {
                                                 onClick={() => {
                                                     void openDetails(t)
                                                 }}
-                                                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50'}`}
+                                                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="min-w-0 truncate">{t.title}</div>
@@ -1615,7 +1656,7 @@ export function TodoPage() {
                                                 onClick={() => {
                                                     void openDetails(t)
                                                 }}
-                                                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50'}`}
+                                                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="min-w-0 truncate">{t.title}</div>
@@ -1638,7 +1679,6 @@ export function TodoPage() {
                 setAddLabels([])
                 setAddLabelInput('')
                 setAddStartDate('')
-                setAddEstimatedMinutes('')
                 setAddDueDate('')
                 setAddPriority(2)
                 setAddAssignee('Self')
@@ -1656,7 +1696,7 @@ export function TodoPage() {
                                     if (e.key === 'Enter') void quickAdd()
                                 }}
                                 placeholder="New task…"
-                                className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
+                                className="mt-1 w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                             />
                         </div>
                         <div className="md:col-span-3">
@@ -1665,7 +1705,7 @@ export function TodoPage() {
                                 <select
                                     value={addPriority}
                                     onChange={(e) => setAddPriority(Number(e.target.value) as 1 | 2 | 3)}
-                                    className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                    className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                 >
                                     <option value={1}>Low</option>
                                     <option value={2}>Medium</option>
@@ -1682,7 +1722,7 @@ export function TodoPage() {
                                 <select
                                     value={addAssignee}
                                     onChange={(e) => setAddAssignee(e.target.value as (typeof ASSIGNEE_OPTIONS)[number])}
-                                    className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                    className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                 >
                                     {ASSIGNEE_OPTIONS.map((name) => (
                                         <option key={name} value={name}>
@@ -1703,48 +1743,54 @@ export function TodoPage() {
                             value={addDescription}
                             onChange={(e) => setAddDescription(e.target.value)}
                             rows={3}
-                            className="mt-1 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
+                            className="mt-1 w-full resize-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                         />
                     </div>
 
                     <div>
                         <div className="grid gap-2 md:grid-cols-12">
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-4">
                                 <label className="text-xs text-zinc-400">Due date</label>
-                                <DateInput
-                                    value={addDueDate}
-                                    onChange={setAddDueDate}
-                                    inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-                                />
+                                <div className="mt-1 flex gap-2">
+                                    <DateInput
+                                        value={addDueDate}
+                                        onChange={setAddDueDate}
+                                        inputClassName="flex-1 rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setAddDueDate(formatToday())}
+                                        className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 text-xs text-blue-200 transition-all hover:bg-blue-500/20 hover:border-blue-400/50"
+                                    >
+                                        Today
+                                    </button>
+                                </div>
                             </div>
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-4">
                                 <label className="text-xs text-zinc-400">Start date</label>
-                                <DateInput
-                                    value={addStartDate}
-                                    onChange={setAddStartDate}
-                                    inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
-                                />
-                            </div>
-                            <div className="md:col-span-3">
-                                <label className="text-xs text-zinc-400">Estimate (mins)</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="1440"
-                                    value={addEstimatedMinutes}
-                                    onChange={(e) => setAddEstimatedMinutes(e.target.value)}
-                                    placeholder="30"
-                                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
-                                />
+                                <div className="mt-1 flex gap-2">
+                                    <DateInput
+                                        value={addStartDate}
+                                        onChange={setAddStartDate}
+                                        inputClassName="flex-1 rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setAddStartDate(formatToday())}
+                                        className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 text-xs text-blue-200 transition-all hover:bg-blue-500/20 hover:border-blue-400/50"
+                                    >
+                                        Today
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-4">
                                 <label className="text-xs text-zinc-400">Repeat</label>
                                 <div className="relative mt-1">
                                     <select
                                         value={addRecurrence}
                                         onChange={(e) => setAddRecurrence(e.target.value as 'none' | 'daily' | 'weekly' | 'monthly')}
-                                        className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                        className="h-10 w-full appearance-none rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 pr-10 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                                     >
                                         <option value="none">None</option>
                                         <option value="daily">Daily</option>
@@ -1765,9 +1811,9 @@ export function TodoPage() {
                             <button
                                 type="button"
                                 onClick={() => setAddCategory('')}
-                                className={`rounded-full border px-3 py-1 text-xs transition ${addCategory.trim().length === 0
-                                    ? 'border-zinc-600 bg-zinc-800 text-zinc-50 ring-1 ring-zinc-600'
-                                    : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900'
+                                className={`rounded-full border px-3 py-1 text-xs transition-all ${addCategory.trim().length === 0
+                                    ? 'border-violet-500/50 bg-violet-500/20 text-violet-100 ring-1 ring-violet-500/30'
+                                    : 'border-zinc-700/50 bg-zinc-950 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
                                     }`}
                             >
                                 None
@@ -1793,7 +1839,7 @@ export function TodoPage() {
                                     key={lab}
                                     type="button"
                                     onClick={() => setAddLabels((prev) => removeLabel(prev, lab))}
-                                    className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-900"
+                                    className="rounded-full border border-zinc-700/50 bg-zinc-950 px-3 py-1 text-xs text-zinc-200 transition-all hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
                                 >
                                     {lab} ×
                                 </button>
@@ -1810,7 +1856,7 @@ export function TodoPage() {
                                 }
                             }}
                             placeholder="Type a label and press Enter…"
-                            className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
+                            className="mt-2 w-full rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                         />
                     </div>
 
@@ -1818,7 +1864,7 @@ export function TodoPage() {
                         <button
                             type="button"
                             onClick={() => setAddOpen(false)}
-                            className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                            className="rounded-lg border border-zinc-700/50 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 transition-all hover:bg-zinc-900 hover:text-zinc-200"
                         >
                             Cancel
                         </button>
@@ -1826,7 +1872,7 @@ export function TodoPage() {
                             type="button"
                             disabled={loading || addTitle.trim().length === 0}
                             onClick={() => void quickAdd()}
-                            className="rounded-lg border border-emerald-600/40 bg-emerald-600/15 px-3 py-2 text-sm text-emerald-100 transition hover:bg-emerald-600/20 disabled:opacity-60"
+                            className="rounded-lg border border-emerald-500/40 bg-gradient-to-r from-emerald-600/20 to-emerald-500/20 px-3 py-2 text-sm text-emerald-100 transition-all hover:from-emerald-600/30 hover:to-emerald-500/30 hover:border-emerald-400/60 disabled:opacity-60 disabled:hover:from-emerald-600/20 disabled:hover:to-emerald-500/20"
                         >
                             Add
                         </button>
@@ -1840,25 +1886,25 @@ export function TodoPage() {
                         <div className="text-base font-semibold text-zinc-50">{detailTask.title}</div>
 
                         <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
-                            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5">
+                            <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5">
                                 Created {new Date(detailTask.created_at).toLocaleString()}
                             </span>
-                            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5">
+                            <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5">
                                 Updated {new Date(detailTask.updated_at).toLocaleString()}
                             </span>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                             <span className={`rounded-md border px-2 py-0.5 ${statusBadge(detailTask.status)}`}>{detailTask.status}</span>
-                            <span className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">
+                            <span className="inline-flex items-center gap-2 rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-zinc-300">
                                 <span className={`h-2 w-2 rounded-full ${priorityDot(detailTask.priority)}`} />
                                 {priorityLabel(detailTask.priority)}
                             </span>
                             {detailTask.recurrence === 'daily' ? (
-                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats daily</span>
+                                <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats daily</span>
                             ) : null}
                             {detailTask.recurrence === 'weekly' ? (
-                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats weekly</span>
+                                <span className="rounded-md border border-zinc-700/50 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats weekly</span>
                             ) : null}
                             {detailTask.recurrence === 'monthly' ? (
                                 <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats monthly</span>
@@ -1881,11 +1927,6 @@ export function TodoPage() {
                             ) : null}
                             {detailTask.assignee ? (
                                 <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Assigned {detailTask.assignee}</span>
-                            ) : null}
-                            {detailTask.estimated_minutes != null ? (
-                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">
-                                    {fmtEstimate(detailTask.estimated_minutes)}
-                                </span>
                             ) : null}
                         </div>
 
@@ -1913,6 +1954,70 @@ export function TodoPage() {
                         </div>
                     </div>
                 ) : null}
+            </Modal>
+
+            {/* History Modal */}
+            <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Task History">
+                <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+                    {loadingHistory ? (
+                        <div className="py-8 text-center text-sm text-zinc-400">Loading history...</div>
+                    ) : history.length === 0 ? (
+                        <div className="py-8 text-center text-sm text-zinc-400">No history yet.</div>
+                    ) : (
+                        history.map((item) => {
+                            const actionColor =
+                                item.action === 'created'
+                                    ? 'text-emerald-400'
+                                    : item.action === 'deleted'
+                                        ? 'text-red-400'
+                                        : item.action === 'completed'
+                                            ? 'text-sky-400'
+                                            : 'text-amber-400'
+
+                            let changes: Record<string, { from: any; to: any }> | null = null
+                            try {
+                                if (item.changes) {
+                                    changes = JSON.parse(item.changes)
+                                }
+                            } catch {
+                                // ignore
+                            }
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className={`font-medium ${actionColor}`}>
+                                                    {item.action.toUpperCase()}
+                                                </span>
+                                                <span className="text-zinc-300">{item.task_title}</span>
+                                            </div>
+                                            <div className="mt-1 text-xs text-zinc-500">
+                                                {new Date(item.created_at).toLocaleString()}
+                                            </div>
+                                            {changes ? (
+                                                <div className="mt-2 space-y-1 text-xs">
+                                                    {Object.entries(changes).map(([field, change]) => (
+                                                        <div key={field} className="text-zinc-400">
+                                                            <span className="font-medium">{field}:</span>{' '}
+                                                            <span className="text-red-300">{String(change.from ?? 'null')}</span>
+                                                            {' → '}
+                                                            <span className="text-emerald-300">{String(change.to ?? 'null')}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })
+                    )}
+                </div>
             </Modal>
         </div>
     )

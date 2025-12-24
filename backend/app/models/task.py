@@ -25,7 +25,6 @@ class Task(Base):
     recurrence_completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=2)  # 1=low,2=med,3=high

@@ -16,6 +16,17 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    labels: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    assignee: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recurrence_completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=2)  # 1=low,2=med,3=high
 

@@ -1,5 +1,7 @@
 export type TaskStatus = 'todo' | 'overdue' | 'done'
 
+export type TaskRecurrence = 'none' | 'daily' | 'weekly' | 'monthly'
+
 export type Task = {
     id: number
     title: string
@@ -7,6 +9,8 @@ export type Task = {
     category: string | null
     labels: string[]
     assignee: string | null
+    recurrence: TaskRecurrence
+    completed_on: string | null
     start_date: string | null
     estimated_minutes: number | null
     due_date: string | null
@@ -23,6 +27,7 @@ export type TaskCreate = {
     category?: string | null
     labels?: string[]
     assignee?: string | null
+    recurrence?: TaskRecurrence
     start_date?: string | null
     estimated_minutes?: number | null
     due_date?: string
@@ -35,6 +40,7 @@ export type TaskUpdate = {
     category?: string | null
     labels?: string[]
     assignee?: string | null
+    recurrence?: TaskRecurrence
     start_date?: string | null
     estimated_minutes?: number | null
     due_date?: string | null
@@ -108,6 +114,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function listTasks(view: 'all' | 'today') {
     return api<Task[]>(`/api/tasks?view=${view}`)
+}
+
+export async function getTask(taskId: number) {
+    return api<Task>(`/api/tasks/${taskId}`)
 }
 
 export async function createTask(payload: TaskCreate) {

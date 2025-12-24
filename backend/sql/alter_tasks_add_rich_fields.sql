@@ -1,0 +1,8 @@
+ALTER TABLE tasks
+ADD COLUMN category VARCHAR(100) NULL,
+ADD COLUMN labels TEXT NULL,
+ADD COLUMN start_date DATE NULL,
+ADD COLUMN estimated_minutes INT NULL,
+ADD COLUMN assignee VARCHAR(100) NULL,
+ADD COLUMN recurrence VARCHAR(20) NULL,
+ADD COLUMN recurrence_completed_on DATE NULL;

@@ -11,6 +11,7 @@ type EditState = {
     category: string
     labels: string[]
     assignee: string
+    recurrence: 'none' | 'daily' | 'weekly' | 'monthly'
     startDate: string
     estimatedMinutes: string
     dueDate: string
@@ -187,6 +188,42 @@ function formatCountdown(dueYyyyMmDd: string, nowMs: number) {
     return `${days} day${days === 1 ? '' : 's'} left`
 }
 
+function isCompletedOn(t: Task, yyyyMmDd: string) {
+    if (t.recurrence && t.recurrence !== 'none') return t.completed_on === yyyyMmDd
+    return t.completed_at != null
+}
+
+function isActiveInRange(t: Task, start: string, end: string) {
+    if (!t.recurrence || t.recurrence === 'none') {
+        const s = t.start_date ?? '0000-01-01'
+        const e = t.due_date ?? '9999-12-31'
+        return s <= end && e >= start
+    }
+
+    // For recurring tasks, check if any occurrence falls in range
+    const startDate = t.start_date ?? '0000-01-01'
+    const endDate = t.due_date ?? '9999-12-31'
+
+    if (start > endDate || end < startDate) return false
+
+    if (t.recurrence === 'daily') return true
+
+    if (t.recurrence === 'weekly') {
+        const daysDiff = Math.floor(
+            (new Date(start).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
+        )
+        return daysDiff >= 0 && daysDiff % 7 === 0
+    }
+
+    if (t.recurrence === 'monthly') {
+        const startDay = new Date(startDate).getDate()
+        const checkDay = new Date(start).getDate()
+        return startDay === checkDay
+    }
+
+    return false
+}
+
 export function TodoPage() {
     const [tasks, setTasks] = useState<Task[]>([])
     const [loading, setLoading] = useState(false)
@@ -198,15 +235,43 @@ export function TodoPage() {
     const [viewMode, setViewMode] = useState<ViewMode>('list')
     const [query, setQuery] = useState('')
 
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-    const [categoryFilter, setCategoryFilter] = useState<string>('all')
-    const [priorityFilter, setPriorityFilter] = useState<'any' | 1 | 2 | 3>('any')
-    const [labelFilter, setLabelFilter] = useState<string[]>([])
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+        try {
+            const saved = localStorage.getItem('todo-status-filter')
+            return saved ? (JSON.parse(saved) as StatusFilter) : 'all'
+        } catch {
+            return 'all'
+        }
+    })
+    const [categoryFilter, setCategoryFilter] = useState<string>(() => {
+        try {
+            const saved = localStorage.getItem('todo-category-filter')
+            return saved ? JSON.parse(saved) : 'all'
+        } catch {
+            return 'all'
+        }
+    })
+    const [priorityFilter, setPriorityFilter] = useState<'any' | 1 | 2 | 3>(() => {
+        try {
+            const saved = localStorage.getItem('todo-priority-filter')
+            return saved ? JSON.parse(saved) : 'any'
+        } catch {
+            return 'any'
+        }
+    })
+    const [labelFilter, setLabelFilter] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('todo-label-filter')
+            return saved ? JSON.parse(saved) : []
+        } catch {
+            return []
+        }
+    })
 
-    const [draftStatusFilter, setDraftStatusFilter] = useState<StatusFilter>('all')
-    const [draftCategoryFilter, setDraftCategoryFilter] = useState<string>('all')
-    const [draftPriorityFilter, setDraftPriorityFilter] = useState<'any' | 1 | 2 | 3>('any')
-    const [draftLabelFilter, setDraftLabelFilter] = useState<string[]>([])
+    const [draftStatusFilter, setDraftStatusFilter] = useState<StatusFilter>(statusFilter)
+    const [draftCategoryFilter, setDraftCategoryFilter] = useState<string>(categoryFilter)
+    const [draftPriorityFilter, setDraftPriorityFilter] = useState<'any' | 1 | 2 | 3>(priorityFilter)
+    const [draftLabelFilter, setDraftLabelFilter] = useState<string[]>(labelFilter)
 
     const [selectedId, setSelectedId] = useState<number | null>(null)
     const [detailTask, setDetailTask] = useState<Task | null>(null)
@@ -222,6 +287,7 @@ export function TodoPage() {
     const [addDueDate, setAddDueDate] = useState('')
     const [addPriority, setAddPriority] = useState<1 | 2 | 3>(2)
     const [addAssignee, setAddAssignee] = useState<(typeof ASSIGNEE_OPTIONS)[number]>('Self')
+    const [addRecurrence, setAddRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none')
     const [addDescription, setAddDescription] = useState('')
 
     const [nowMs, setNowMs] = useState(() => Date.now())
@@ -249,6 +315,22 @@ export function TodoPage() {
         return () => window.clearInterval(id)
     }, [])
 
+    useEffect(() => {
+        localStorage.setItem('todo-status-filter', JSON.stringify(statusFilter))
+    }, [statusFilter])
+
+    useEffect(() => {
+        localStorage.setItem('todo-category-filter', JSON.stringify(categoryFilter))
+    }, [categoryFilter])
+
+    useEffect(() => {
+        localStorage.setItem('todo-priority-filter', JSON.stringify(priorityFilter))
+    }, [priorityFilter])
+
+    useEffect(() => {
+        localStorage.setItem('todo-label-filter', JSON.stringify(labelFilter))
+    }, [labelFilter])
+
     function startEdit(t: Task) {
         setEditLabelInput('')
         setEditing({
@@ -256,13 +338,28 @@ export function TodoPage() {
             title: t.title,
             description: t.description ?? '',
             category: t.category ?? '',
-            labels: t.labels ?? [],
+            labels: [...(t.labels ?? [])],
             assignee: (t.assignee ?? '').trim(),
+            recurrence: t.recurrence ?? 'none',
             startDate: t.start_date ?? '',
             estimatedMinutes: t.estimated_minutes != null ? String(t.estimated_minutes) : '',
             dueDate: t.due_date ?? '',
             priority: t.priority,
         })
+    }
+
+    function startEditById(taskId: number) {
+        const task = tasks.find((x) => x.id === taskId)
+        if (task) {
+            startEdit(task)
+        } else {
+            setError('Task not found')
+        }
+    }
+
+    function openDetails(t: Task) {
+        setSelectedId(t.id)
+        setDetailTask(t)
     }
 
     async function saveEdit() {
@@ -279,6 +376,7 @@ export function TodoPage() {
                 category: editing.category.trim().length > 0 ? editing.category.trim() : null,
                 labels: editing.labels,
                 assignee: editing.assignee.trim().length > 0 ? editing.assignee.trim() : null,
+                recurrence: editing.recurrence,
                 start_date: editing.startDate.trim().length > 0 ? editing.startDate : null,
                 estimated_minutes:
                     editing.estimatedMinutes.trim().length > 0
@@ -300,7 +398,8 @@ export function TodoPage() {
         setLoading(true)
         setError(null)
         try {
-            await updateTask(t.id, { completed: t.completed_at == null })
+            const done = isCompletedOn(t, today)
+            await updateTask(t.id, { completed: !done })
             await reload()
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to update task')
@@ -324,7 +423,7 @@ export function TodoPage() {
     }
 
     async function markDone(t: Task) {
-        if (t.completed_at != null) return
+        if (isCompletedOn(t, today)) return
         setLoading(true)
         setError(null)
         try {
@@ -356,6 +455,7 @@ export function TodoPage() {
                 category: addCategory.trim().length > 0 ? addCategory.trim() : undefined,
                 labels: addLabels,
                 assignee: addAssignee.trim().length > 0 ? addAssignee : undefined,
+                recurrence: addRecurrence,
                 start_date: addStartDate.trim().length > 0 ? addStartDate : undefined,
                 estimated_minutes: est != null ? est : undefined,
             })
@@ -368,6 +468,7 @@ export function TodoPage() {
             setAddDueDate('')
             setAddPriority(2)
             setAddAssignee('Self')
+            setAddRecurrence('none')
             setAddDescription('')
             setAddOpen(false)
             await reload()
@@ -379,6 +480,48 @@ export function TodoPage() {
     }
 
     const today = useMemo(() => formatToday(), [])
+
+    // Reusable filter helpers
+    const taskMatchesDateMode = useMemo(() => {
+        return (t: Task, mode: DateMode, customDay: string, todayDay: string) => {
+            const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+
+            if (hasRecurrence) {
+                if (mode === 'today') return isActiveInRange(t, todayDay, todayDay)
+                if (mode === 'custom') return isActiveInRange(t, customDay, customDay)
+                return isActiveInRange(t, todayDay, addDays(todayDay, 6))
+            }
+
+            const due = t.due_date
+            if (mode === 'today') return due == null || due <= todayDay
+            if (mode === 'custom') return due != null && due === customDay
+            return due != null && due >= todayDay && due <= addDays(todayDay, 6)
+        }
+    }, [])
+
+    const taskMatchesFilters = useMemo(() => {
+        return (t: Task, q: string, completionDay: string) => {
+            const isCompleted = isCompletedOn(t, completionDay)
+            if (statusFilter === 'completed' && !isCompleted) return false
+            if (statusFilter === 'pending' && isCompleted) return false
+
+            if (categoryFilter !== 'all' && (t.category ?? '') !== categoryFilter) return false
+            if (priorityFilter !== 'any' && t.priority !== priorityFilter) return false
+
+            if (labelFilter.length > 0) {
+                const set = new Set((t.labels ?? []).map((x) => x.toLowerCase()))
+                const any = labelFilter.some((x) => set.has(x.toLowerCase()))
+                if (!any) return false
+            }
+
+            if (q) {
+                const hay = `${t.title} ${t.description ?? ''} ${t.category ?? ''} ${(t.labels ?? []).join(' ')}`.toLowerCase()
+                if (!hay.includes(q)) return false
+            }
+
+            return true
+        }
+    }, [statusFilter, categoryFilter, priorityFilter, labelFilter])
 
     const availableCategories = useMemo(() => {
         const set = new Set<string>()
@@ -402,110 +545,57 @@ export function TodoPage() {
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase()
-
-        function inDateMode(t: Task) {
-            const due = t.due_date
-            if (dateMode === 'today') return due == null || due <= today
-            if (dateMode === 'custom') return due != null && due === customDate
-            return due != null && due >= today && due <= addDays(today, 6)
-        }
-
-        function matchesFilters(t: Task) {
-            if (!inDateMode(t)) return false
-
-            const isCompleted = t.completed_at != null
-            if (statusFilter === 'completed' && !isCompleted) return false
-            if (statusFilter === 'pending' && isCompleted) return false
-
-            if (categoryFilter !== 'all' && (t.category ?? '') !== categoryFilter) return false
-
-            if (priorityFilter !== 'any' && t.priority !== priorityFilter) return false
-
-            if (labelFilter.length > 0) {
-                const set = new Set((t.labels ?? []).map((x) => x.toLowerCase()))
-                const any = labelFilter.some((x) => set.has(x.toLowerCase()))
-                if (!any) return false
-            }
-
-            return true
-        }
+        const completionDay = dateMode === 'custom' ? customDate : today
 
         return tasks
             .filter((t) => {
-                if (!matchesFilters(t)) return false
-                if (!q) return true
-                const hay = `${t.title} ${t.description ?? ''} ${t.category ?? ''} ${(t.labels ?? []).join(' ')}`.toLowerCase()
-                return hay.includes(q)
+                if (!taskMatchesDateMode(t, dateMode, customDate, today)) return false
+                return taskMatchesFilters(t, q, completionDay)
             })
             .sort((a, b) => {
+                const aDone = isCompletedOn(a, completionDay)
+                const bDone = isCompletedOn(b, completionDay)
+                if (aDone && !bDone) return 1
+                if (!aDone && bDone) return -1
+
                 const aDue = a.due_date ?? '9999-12-31'
                 const bDue = b.due_date ?? '9999-12-31'
-                if (a.completed_at && !b.completed_at) return 1
-                if (!a.completed_at && b.completed_at) return -1
                 if (aDue !== bDue) return aDue.localeCompare(bDue)
+
                 return b.created_at.localeCompare(a.created_at)
             })
-    }, [categoryFilter, customDate, dateMode, labelFilter, priorityFilter, query, statusFilter, tasks, today])
+    }, [tasks, dateMode, customDate, today, query, taskMatchesDateMode, taskMatchesFilters])
 
     const insights = useMemo(() => {
         const q = query.trim().toLowerCase()
-
-        function inDateMode(t: Task) {
-            const due = t.due_date
-            if (dateMode === 'today') return due == null || due <= today
-            if (dateMode === 'custom') return due != null && due === customDate
-            return due != null && due >= today && due <= addDays(today, 6)
-        }
-
-        function matchesStatus(t: Task) {
-            const isCompleted = t.completed_at != null
-            if (statusFilter === 'completed') return isCompleted
-            if (statusFilter === 'pending') return !isCompleted
-            return true
-        }
-
-        function matchesNonStatusFilters(t: Task) {
-            if (categoryFilter !== 'all' && (t.category ?? '') !== categoryFilter) return false
-
-            if (priorityFilter !== 'any' && t.priority !== priorityFilter) return false
-
-            if (labelFilter.length > 0) {
-                const set = new Set((t.labels ?? []).map((x) => x.toLowerCase()))
-                const any = labelFilter.some((x) => set.has(x.toLowerCase()))
-                if (!any) return false
-            }
-
-            if (q) {
-                const hay = `${t.title} ${t.description ?? ''} ${t.category ?? ''} ${(t.labels ?? []).join(' ')}`.toLowerCase()
-                if (!hay.includes(q)) return false
-            }
-
-            return true
-        }
+        const completionDay = dateMode === 'custom' ? customDate : today
 
         const visibleMain = tasks.filter((t) => {
-            if (!inDateMode(t)) return false
-            if (!matchesStatus(t)) return false
-            return matchesNonStatusFilters(t)
+            if (!taskMatchesDateMode(t, dateMode, customDate, today)) return false
+            return taskMatchesFilters(t, q, completionDay)
         })
 
+        // Add ongoing tasks to today scope
         const scope =
             dateMode === 'today'
                 ? visibleMain.concat(
                     tasks.filter((t) => {
-                        if (t.completed_at != null) return false
+                        const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+                        if (hasRecurrence) return false
+                        if (isCompletedOn(t, completionDay)) return false
                         if (statusFilter === 'completed') return false
 
                         if (!t.start_date || !t.due_date) return false
                         if (!(t.start_date <= today && t.due_date > today)) return false
+                        if (!(t.start_date < t.due_date)) return false
 
-                        return matchesNonStatusFilters(t)
+                        return taskMatchesFilters(t, q, completionDay)
                     })
                 )
                 : visibleMain
 
-        const done = scope.filter((t) => t.completed_at != null).length
-        const pending = scope.filter((t) => t.completed_at == null).length
+        const done = scope.filter((t) => isCompletedOn(t, completionDay)).length
+        const pending = scope.filter((t) => !isCompletedOn(t, completionDay)).length
         const pct = scope.length === 0 ? 0 : Math.round((done / scope.length) * 100)
 
         return {
@@ -514,11 +604,14 @@ export function TodoPage() {
             pendingToday: pending,
             pct,
         }
-    }, [categoryFilter, customDate, dateMode, labelFilter, priorityFilter, query, statusFilter, tasks, today])
+    }, [tasks, dateMode, customDate, today, query, statusFilter, taskMatchesDateMode, taskMatchesFilters])
 
     const upcomingPanel = useMemo(() => {
         return tasks
-            .filter((t) => t.completed_at == null && !!t.due_date && t.due_date > today)
+            .filter((t) => {
+                const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+                return !hasRecurrence && t.completed_at == null && !!t.due_date && t.due_date > today
+            })
             .sort((a, b) => {
                 const aDue = a.due_date ?? '9999-12-31'
                 const bDue = b.due_date ?? '9999-12-31'
@@ -530,15 +623,15 @@ export function TodoPage() {
 
     const completedPanel = useMemo(() => {
         return tasks
-            .filter((t) => t.completed_at != null)
+            .filter((t) => isCompletedOn(t, today))
             .sort((a, b) => {
-                const aDone = a.completed_at ?? ''
-                const bDone = b.completed_at ?? ''
+                const aDone = a.completed_at ?? (a.completed_on ? `${a.completed_on}T23:59:59` : '')
+                const bDone = b.completed_at ?? (b.completed_on ? `${b.completed_on}T23:59:59` : '')
                 if (aDone !== bDone) return bDone.localeCompare(aDone)
                 return b.updated_at.localeCompare(a.updated_at)
             })
             .slice(0, 8)
-    }, [tasks])
+    }, [tasks, today])
 
     const ongoingToday = useMemo(() => {
         if (dateMode !== 'today') return []
@@ -546,27 +639,17 @@ export function TodoPage() {
         const q = query.trim().toLowerCase()
         return tasks
             .filter((t) => {
-                if (t.completed_at != null) return false
+                const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+                if (hasRecurrence) return false
+
+                if (isCompletedOn(t, today)) return false
                 if (statusFilter === 'completed') return false
 
                 if (!t.start_date || !t.due_date) return false
                 if (!(t.start_date <= today && t.due_date > today)) return false
+                if (!(t.start_date < t.due_date)) return false
 
-                if (categoryFilter !== 'all' && (t.category ?? '') !== categoryFilter) return false
-                if (priorityFilter !== 'any' && t.priority !== priorityFilter) return false
-
-                if (labelFilter.length > 0) {
-                    const set = new Set((t.labels ?? []).map((x) => x.toLowerCase()))
-                    const any = labelFilter.some((x) => set.has(x.toLowerCase()))
-                    if (!any) return false
-                }
-
-                if (q) {
-                    const hay = `${t.title} ${t.description ?? ''} ${t.category ?? ''} ${(t.labels ?? []).join(' ')}`.toLowerCase()
-                    if (!hay.includes(q)) return false
-                }
-
-                return true
+                return taskMatchesFilters(t, q, today)
             })
             .sort((a, b) => {
                 const aDue = a.due_date ?? '9999-12-31'
@@ -574,14 +657,50 @@ export function TodoPage() {
                 if (aDue !== bDue) return aDue.localeCompare(bDue)
                 return b.created_at.localeCompare(a.created_at)
             })
-    }, [categoryFilter, dateMode, labelFilter, priorityFilter, query, statusFilter, tasks, today])
+    }, [dateMode, tasks, today, query, statusFilter, taskMatchesFilters])
+
+    const todayTasks = useMemo(() => {
+        if (dateMode !== 'today') return []
+
+        const q = query.trim().toLowerCase()
+        return tasks
+            .filter((t) => {
+                const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+                const isRecurringToday = hasRecurrence && isActiveInRange(t, today, today)
+                const isDueToday = !hasRecurrence && t.due_date != null && t.due_date === today
+
+                if (!isRecurringToday && !isDueToday) return false
+
+                return taskMatchesFilters(t, q, today)
+            })
+            .sort((a, b) => {
+                const aDone = isCompletedOn(a, today)
+                const bDone = isCompletedOn(b, today)
+                if (aDone && !bDone) return 1
+                if (!aDone && bDone) return -1
+                const aDue = a.due_date ?? '9999-12-31'
+                const bDue = b.due_date ?? '9999-12-31'
+                if (aDue !== bDue) return aDue.localeCompare(bDue)
+                return b.created_at.localeCompare(a.created_at)
+            })
+    }, [dateMode, tasks, today, query, taskMatchesFilters])
+
+    const listItems = useMemo(() => {
+        if (dateMode !== 'today') return filtered
+        const hidden = new Set<number>()
+        for (const t of todayTasks) hidden.add(t.id)
+        for (const t of ongoingToday) hidden.add(t.id)
+        if (editing?.id != null) hidden.delete(editing.id)
+        return filtered.filter((t) => !hidden.has(t.id))
+    }, [dateMode, editing?.id, filtered, ongoingToday, todayTasks])
 
     const board = useMemo(() => {
-        const pending = filtered.filter((t) => t.completed_at == null && (!t.due_date || t.due_date > today))
+        const hasRecurrence = (t: Task) => t.recurrence && t.recurrence !== 'none'
+        const pending = filtered.filter((t) => !isCompletedOn(t, today) && (!t.due_date || t.due_date > today || hasRecurrence(t)))
         const inProgress = filtered.filter(
-            (t) => t.completed_at == null && !!t.due_date && t.due_date >= today && t.due_date <= addDays(today, 6)
+            (t) => !hasRecurrence(t) && !isCompletedOn(t, today) && !!t.due_date && t.due_date >= today && t.due_date <= addDays(today, 6)
         )
-        const completed = filtered.filter((t) => t.completed_at != null)
+        const completed = filtered.filter((t) => isCompletedOn(t, today))
         return { pending, inProgress, completed }
     }, [filtered, today])
 
@@ -820,8 +939,64 @@ export function TodoPage() {
 
                 <section className="min-h-0 overflow-y-auto lg:col-span-7">
                     {viewMode === 'calendar' ? (
-                        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-6 text-sm text-zinc-500">
-                            Calendar view is coming next.
+                        <div className="space-y-2">
+                            {(() => {
+                                const days: { date: string; label: string; tasks: Task[] }[] = []
+                                const startDate = dateMode === 'custom' ? customDate : dateMode === 'today' ? today : today
+                                const range = dateMode === 'week' ? 7 : dateMode === 'custom' ? 1 : 7
+
+                                for (let i = 0; i < range; i++) {
+                                    const d = addDays(startDate, i)
+                                    const dt = new Date(d + 'T00:00:00')
+                                    const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                                    const dayTasks = filtered.filter((t) => {
+                                        const hasRecurrence = t.recurrence && t.recurrence !== 'none'
+                                        if (hasRecurrence) {
+                                            return isActiveInRange(t, d, d)
+                                        }
+                                        if (t.due_date === d) return true
+                                        if (t.start_date && t.due_date && t.start_date <= d && t.due_date >= d) return true
+                                        return false
+                                    })
+                                    days.push({ date: d, label, tasks: dayTasks })
+                                }
+
+                                return days.map((day) => (
+                                    <div key={day.date} className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <div className="text-xs font-medium text-zinc-400">{day.label}</div>
+                                            <div className="text-xs text-zinc-500">{day.tasks.length} task{day.tasks.length === 1 ? '' : 's'}</div>
+                                        </div>
+                                        {day.tasks.length === 0 ? (
+                                            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center text-xs text-zinc-500">
+                                                No tasks
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                {day.tasks.map((t) => (
+                                                    <button
+                                                        key={t.id}
+                                                        type="button"
+                                                        onClick={() => void openDetails(t)}
+                                                        className={`group flex w-full items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left transition hover:bg-zinc-900 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
+                                                    >
+                                                        <div className={`h-2 w-2 shrink-0 rounded-full ${priorityDot(t.priority)}`} />
+                                                        <div className={`min-w-0 flex-1 truncate text-sm ${isCompletedOn(t, day.date) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                                                            {t.title}
+                                                        </div>
+                                                        {t.recurrence && t.recurrence !== 'none' ? (
+                                                            <span className="shrink-0 text-xs text-zinc-500">{t.recurrence.charAt(0).toUpperCase() + t.recurrence.slice(1)}</span>
+                                                        ) : null}
+                                                        {isCompletedOn(t, day.date) ? (
+                                                            <span className="shrink-0 text-xs text-emerald-400">✓</span>
+                                                        ) : null}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            })()}
                         </div>
                     ) : null}
 
@@ -839,7 +1014,7 @@ export function TodoPage() {
                                             <button
                                                 key={t.id}
                                                 type="button"
-                                                onClick={() => setSelectedId(t.id)}
+                                                onClick={() => void openDetails(t)}
                                                 className={`block w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left text-sm transition hover:bg-zinc-900 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
                                             >
                                                 <div className="flex items-center justify-between gap-2">
@@ -864,31 +1039,182 @@ export function TodoPage() {
 
                     {viewMode === 'list' ? (
                         <div className="space-y-2">
-                            {dateMode === 'today' && ongoingToday.length > 0 ? (
+                            {dateMode === 'today' && todayTasks.length > 0 ? (
                                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
-                                    <div className="mb-2 text-xs font-medium text-zinc-400">Ongoing</div>
-                                    <div className="space-y-1">
-                                        {ongoingToday.map((t) => (
-                                            <button
+                                    <div className="mb-2 text-xs font-medium text-zinc-400">Today</div>
+                                    <div className="space-y-2">
+                                        {todayTasks.map((t) => (
+                                            <div
                                                 key={t.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedId(t.id)
-                                                    setDetailTask(t)
-                                                }}
-                                                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-zinc-900"
+                                                className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
                                             >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div className="min-w-0 truncate">{t.title}</div>
-                                                    <div className="shrink-0 text-xs text-zinc-500">{t.due_date ? formatCountdown(t.due_date, nowMs) : ''}</div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void toggleComplete(t)}
+                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                    aria-label="Toggle complete"
+                                                />
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        void openDetails(t)
+                                                    }}
+                                                    className="min-w-0 flex-1 text-left"
+                                                >
+                                                    <div className={`truncate text-sm font-medium ${isCompletedOn(t, today) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>{t.title}</div>
+                                                </button>
+
+                                                <div className="shrink-0 text-xs text-zinc-500">
+                                                    {t.recurrence && t.recurrence !== 'none'
+                                                        ? isCompletedOn(t, today)
+                                                            ? 'Done'
+                                                            : t.recurrence.charAt(0).toUpperCase() + t.recurrence.slice(1)
+                                                        : t.due_date
+                                                            ? `Due ${t.due_date}`
+                                                            : ''}
                                                 </div>
-                                            </button>
+
+                                                <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void startEditById(t.id)
+                                                        }}
+                                                        aria-label="Edit"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
+                                                    >
+                                                        <IconPencil className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void markDone(t)
+                                                        }}
+                                                        aria-label="Mark as done"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out hover:scale-105 hover:bg-emerald-600/15 active:scale-95"
+                                                    >
+                                                        <IconCheck className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void remove(t)
+                                                        }}
+                                                        aria-label="Delete"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-rose-500/15 active:scale-95"
+                                                    >
+                                                        <IconTrash className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             ) : null}
 
-                            {filtered.map((t) => (
+                            {dateMode === 'today' && ongoingToday.length > 0 ? (
+                                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
+                                    <div className="mb-2 text-xs font-medium text-zinc-400">Ongoing</div>
+                                    <div className="space-y-2">
+                                        {ongoingToday.map((t) => (
+                                            <div
+                                                key={t.id}
+                                                className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void toggleComplete(t)}
+                                                    className={`h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                    aria-label="Toggle complete"
+                                                />
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        void openDetails(t)
+                                                    }}
+                                                    className="min-w-0 flex-1 text-left"
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <div className="truncate text-sm font-medium text-zinc-100">{t.title}</div>
+                                                        {t.category ? (
+                                                            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+                                                                {t.category}
+                                                            </span>
+                                                        ) : null}
+                                                        {t.estimated_minutes != null ? (
+                                                            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+                                                                {fmtEstimate(t.estimated_minutes)}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    {t.labels && t.labels.length > 0 ? (
+                                                        <div className="mt-1 flex flex-wrap gap-1">
+                                                            {t.labels.slice(0, 3).map((lab) => (
+                                                                <span
+                                                                    key={lab}
+                                                                    className="rounded-full border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300"
+                                                                >
+                                                                    {lab}
+                                                                </span>
+                                                            ))}
+                                                            {t.labels.length > 3 ? (
+                                                                <span className="rounded-full border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-500">
+                                                                    +{t.labels.length - 3}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                    ) : null}
+                                                </button>
+
+                                                <div className="shrink-0 text-xs text-zinc-500">{t.due_date ? formatCountdown(t.due_date, nowMs) : ''}</div>
+
+                                                <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void startEditById(t.id)
+                                                        }}
+                                                        aria-label="Edit"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
+                                                    >
+                                                        <IconPencil className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void markDone(t)
+                                                        }}
+                                                        aria-label="Mark as done"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-600/40 bg-emerald-600/10 text-emerald-100 transition-all duration-150 ease-out hover:scale-105 hover:bg-emerald-600/15 active:scale-95"
+                                                    >
+                                                        <IconCheck className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void remove(t)
+                                                        }}
+                                                        aria-label="Delete"
+                                                        className="grid h-9 w-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-rose-500/15 active:scale-95"
+                                                    >
+                                                        <IconTrash className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {listItems.map((t) => (
                                 <div
                                     key={t.id}
                                     className={`group rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/20 active:translate-y-0 ${selectedId === t.id ? 'ring-1 ring-zinc-600' : ''}`}
@@ -972,7 +1298,7 @@ export function TodoPage() {
                                             </div>
 
                                             <div className="grid gap-2 md:grid-cols-12">
-                                                <div className="md:col-span-4">
+                                                <div className="md:col-span-3">
                                                     <label className="text-xs text-zinc-400">Due date</label>
                                                     <DateInput
                                                         value={editing.dueDate}
@@ -980,7 +1306,7 @@ export function TodoPage() {
                                                         inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
                                                     />
                                                 </div>
-                                                <div className="md:col-span-4">
+                                                <div className="md:col-span-3">
                                                     <label className="text-xs text-zinc-400">Start date</label>
                                                     <DateInput
                                                         value={editing.startDate}
@@ -988,15 +1314,36 @@ export function TodoPage() {
                                                         inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
                                                     />
                                                 </div>
-                                                <div className="md:col-span-4">
+                                                <div className="md:col-span-3">
                                                     <label className="text-xs text-zinc-400">Estimate (mins)</label>
                                                     <input
-                                                        inputMode="numeric"
+                                                        type="number"
+                                                        min="1"
+                                                        max="1440"
                                                         value={editing.estimatedMinutes}
                                                         onChange={(e) => setEditing({ ...editing, estimatedMinutes: e.target.value })}
                                                         placeholder="30"
                                                         className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
                                                     />
+                                                </div>
+
+                                                <div className="md:col-span-3">
+                                                    <label className="text-xs text-zinc-400">Repeat</label>
+                                                    <div className="relative mt-1">
+                                                        <select
+                                                            value={editing.recurrence}
+                                                            onChange={(e) => setEditing({ ...editing, recurrence: e.target.value as 'none' | 'daily' | 'weekly' | 'monthly' })}
+                                                            className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                                        >
+                                                            <option value="none">None</option>
+                                                            <option value="daily">Daily</option>
+                                                            <option value="weekly">Weekly</option>
+                                                            <option value="monthly">Monthly</option>
+                                                        </select>
+                                                        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-zinc-500">
+                                                            ▾
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -1103,21 +1450,20 @@ export function TodoPage() {
                                                     e.stopPropagation()
                                                     void toggleComplete(t)
                                                 }}
-                                                className={`mt-0.5 h-6 w-6 shrink-0 rounded border ${t.completed_at ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
+                                                className={`mt-0.5 h-6 w-6 shrink-0 rounded border ${isCompletedOn(t, dateMode === 'custom' ? customDate : today) ? 'border-emerald-400 bg-emerald-400/20' : 'border-zinc-600 bg-transparent'} transition-transform duration-150 ease-out hover:scale-105 active:scale-95`}
                                                 aria-label="Toggle complete"
                                             />
 
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    setSelectedId(t.id)
-                                                    setDetailTask(t)
+                                                    void openDetails(t)
                                                 }}
                                                 className="min-w-0 flex-1 text-left"
                                             >
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <div
-                                                        className={`min-w-0 truncate text-sm font-medium ${t.completed_at ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}
+                                                        className={`min-w-0 truncate text-sm font-medium ${isCompletedOn(t, dateMode === 'custom' ? customDate : today) ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}
                                                     >
                                                         {t.title}
                                                     </div>
@@ -1178,7 +1524,7 @@ export function TodoPage() {
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation()
-                                                        startEdit(t)
+                                                        void startEditById(t.id)
                                                     }}
                                                     aria-label="Edit"
                                                     className="grid h-10 w-10 place-items-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 transition-all duration-150 ease-out hover:scale-105 hover:bg-zinc-900 active:scale-95"
@@ -1238,8 +1584,7 @@ export function TodoPage() {
                                                 key={t.id}
                                                 type="button"
                                                 onClick={() => {
-                                                    setSelectedId(t.id)
-                                                    setDetailTask(t)
+                                                    void openDetails(t)
                                                 }}
                                                 className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50'}`}
                                             >
@@ -1268,14 +1613,13 @@ export function TodoPage() {
                                                 key={t.id}
                                                 type="button"
                                                 onClick={() => {
-                                                    setSelectedId(t.id)
-                                                    setDetailTask(t)
+                                                    void openDetails(t)
                                                 }}
                                                 className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${selectedId === t.id ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="min-w-0 truncate">{t.title}</div>
-                                                    <div className="shrink-0 text-xs text-zinc-500">{t.completed_at ? 'Done' : ''}</div>
+                                                    <div className="shrink-0 text-xs text-zinc-500">{isCompletedOn(t, today) ? 'Done' : ''}</div>
                                                 </div>
                                             </button>
                                         ))}
@@ -1287,7 +1631,20 @@ export function TodoPage() {
                 </aside>
             </div>
 
-            <Modal open={addOpen} title="Add task" onClose={() => setAddOpen(false)} maxWidthClassName="w-[min(720px,calc(100%-2rem))]">
+            <Modal open={addOpen} title="Add task" onClose={() => {
+                setAddOpen(false)
+                setAddTitle('')
+                setAddCategory('')
+                setAddLabels([])
+                setAddLabelInput('')
+                setAddStartDate('')
+                setAddEstimatedMinutes('')
+                setAddDueDate('')
+                setAddPriority(2)
+                setAddAssignee('Self')
+                setAddRecurrence('none')
+                setAddDescription('')
+            }} maxWidthClassName="w-[min(720px,calc(100%-2rem))]">
                 <div className="space-y-3">
                     <div className="grid gap-2 md:grid-cols-12">
                         <div className="md:col-span-6">
@@ -1352,7 +1709,7 @@ export function TodoPage() {
 
                     <div>
                         <div className="grid gap-2 md:grid-cols-12">
-                            <div className="md:col-span-4">
+                            <div className="md:col-span-3">
                                 <label className="text-xs text-zinc-400">Due date</label>
                                 <DateInput
                                     value={addDueDate}
@@ -1360,7 +1717,7 @@ export function TodoPage() {
                                     inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
                                 />
                             </div>
-                            <div className="md:col-span-4">
+                            <div className="md:col-span-3">
                                 <label className="text-xs text-zinc-400">Start date</label>
                                 <DateInput
                                     value={addStartDate}
@@ -1368,15 +1725,36 @@ export function TodoPage() {
                                     inputClassName="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-zinc-600"
                                 />
                             </div>
-                            <div className="md:col-span-4">
+                            <div className="md:col-span-3">
                                 <label className="text-xs text-zinc-400">Estimate (mins)</label>
                                 <input
-                                    inputMode="numeric"
+                                    type="number"
+                                    min="1"
+                                    max="1440"
                                     value={addEstimatedMinutes}
                                     onChange={(e) => setAddEstimatedMinutes(e.target.value)}
                                     placeholder="30"
                                     className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-zinc-600"
                                 />
+                            </div>
+
+                            <div className="md:col-span-3">
+                                <label className="text-xs text-zinc-400">Repeat</label>
+                                <div className="relative mt-1">
+                                    <select
+                                        value={addRecurrence}
+                                        onChange={(e) => setAddRecurrence(e.target.value as 'none' | 'daily' | 'weekly' | 'monthly')}
+                                        className="h-10 w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 pr-10 text-sm outline-none focus:border-zinc-600"
+                                    >
+                                        <option value="none">None</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-zinc-500">
+                                        ▾
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1476,6 +1854,20 @@ export function TodoPage() {
                                 <span className={`h-2 w-2 rounded-full ${priorityDot(detailTask.priority)}`} />
                                 {priorityLabel(detailTask.priority)}
                             </span>
+                            {detailTask.recurrence === 'daily' ? (
+                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats daily</span>
+                            ) : null}
+                            {detailTask.recurrence === 'weekly' ? (
+                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats weekly</span>
+                            ) : null}
+                            {detailTask.recurrence === 'monthly' ? (
+                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Repeats monthly</span>
+                            ) : null}
+                            {detailTask.recurrence === 'daily' ? (
+                                <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">
+                                    {detailTask.completed_on === today ? 'Done today' : 'Not done today'}
+                                </span>
+                            ) : null}
                             {detailTask.due_date ? (
                                 <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-zinc-300">Due {detailTask.due_date}</span>
                             ) : (

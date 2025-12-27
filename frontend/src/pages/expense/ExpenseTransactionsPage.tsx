@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../../components/Modal'
 import {
     createFinanceTransaction,
+    deleteFinanceTransaction,
     listFinanceAssets,
     listFinanceLiabilities,
     listFinanceTransactions,
+    updateFinanceTransaction,
 } from '../../lib/api'
-import type { FinanceAsset, FinanceLiability, FinanceTransaction, FinanceTransactionCreate } from '../../lib/api'
+import type { FinanceAsset, FinanceLiability, FinanceTransaction, FinanceTransactionCreate, FinanceTransactionUpdate } from '../../lib/api'
 
 function money(n: number) {
     const sign = n < 0 ? '-' : ''
@@ -17,6 +19,46 @@ function money(n: number) {
 function isoLocalDateTime(d: Date) {
     const pad = (x: number) => String(x).padStart(2, '0')
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function IconDownload({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+            <path d="M12 3v12" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M5 21h14" />
+        </svg>
+    )
+}
+
+function IconPlus({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+        </svg>
+    )
+}
+
+function IconEdit({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+        </svg>
+    )
+}
+
+function IconTrash({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+        </svg>
+    )
 }
 
 export function ExpenseTransactionsPage() {
@@ -30,6 +72,7 @@ export function ExpenseTransactionsPage() {
     const [q, setQ] = useState('')
 
     const [open, setOpen] = useState(false)
+    const [editingId, setEditingId] = useState<number | null>(null)
     const [form, setForm] = useState<FinanceTransactionCreate>(() => ({
         txn_type: 'expense',
         amount: 0,
@@ -94,7 +137,24 @@ export function ExpenseTransactionsPage() {
     }
 
     function openAdd() {
+        setEditingId(null)
         setForm((f) => ({ ...f, transacted_at: isoLocalDateTime(new Date()) }))
+        setOpen(true)
+    }
+
+    function openEdit(txn: FinanceTransaction) {
+        setEditingId(txn.id)
+        setForm({
+            txn_type: txn.txn_type as any,
+            amount: Number(txn.amount),
+            category: txn.category,
+            description: txn.description ?? '',
+            transacted_at: isoLocalDateTime(new Date(txn.transacted_at)),
+            from_asset_id: txn.from_asset_id ?? null,
+            to_asset_id: txn.to_asset_id ?? null,
+            liability_id: txn.liability_id ?? null,
+            recurring_id: txn.recurring_id ?? null,
+        })
         setOpen(true)
     }
 
@@ -125,15 +185,37 @@ export function ExpenseTransactionsPage() {
     async function submit() {
         setError(null)
         try {
-            await createFinanceTransaction({
+            const base = {
                 ...form,
                 amount: Number(form.amount),
                 transacted_at: new Date(form.transacted_at).toISOString(),
-            })
+            }
+
+            if (editingId != null) {
+                const payload: FinanceTransactionUpdate = {
+                    ...base,
+                }
+                await updateFinanceTransaction(editingId, payload)
+            } else {
+                await createFinanceTransaction(base)
+            }
             setOpen(false)
+            setEditingId(null)
             await reload()
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to create transaction')
+            setError(e instanceof Error ? e.message : (editingId != null ? 'Failed to update transaction' : 'Failed to create transaction'))
+        }
+    }
+
+    async function remove(txn: FinanceTransaction) {
+        const ok = window.confirm('Delete this transaction? This will update balances.')
+        if (!ok) return
+        setError(null)
+        try {
+            await deleteFinanceTransaction(txn.id)
+            await reload()
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to delete transaction')
         }
     }
 
@@ -172,16 +254,18 @@ export function ExpenseTransactionsPage() {
                     <button
                         type="button"
                         onClick={() => void exportCsv()}
-                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
                     >
-                        Download
+                        <IconDownload className="h-4 w-4" />
+                        <span className="hidden sm:inline">Download</span>
                     </button>
                     <button
                         type="button"
                         onClick={() => openAdd()}
-                        className="rounded-lg border border-blue-500/40 bg-blue-600/20 px-3 py-2 text-sm text-zinc-50 transition hover:bg-blue-600/30"
+                        className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-600/20 px-3 py-2 text-sm text-zinc-50 transition hover:bg-blue-600/30"
                     >
-                        + Add
+                        <IconPlus className="h-4 w-4" />
+                        <span className="hidden sm:inline">Add</span>
                     </button>
                 </div>
             </div>
@@ -219,8 +303,28 @@ export function ExpenseTransactionsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className={`text-sm font-semibold ${isExpense ? 'text-red-200' : 'text-emerald-200'}`}>
-                                    {isExpense ? '-' : '+'}{money(amt)}
+                                <div className="flex items-center gap-3">
+                                    <div className={`text-sm font-semibold ${isExpense ? 'text-red-200' : 'text-emerald-200'}`}>
+                                        {isExpense ? '-' : '+'}{money(amt)}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => openEdit(t)}
+                                            aria-label="Edit transaction"
+                                            className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-zinc-200 transition hover:bg-zinc-900 hover:text-zinc-50"
+                                        >
+                                            <IconEdit className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void remove(t)}
+                                            aria-label="Delete transaction"
+                                            className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-zinc-200 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-100"
+                                        >
+                                            <IconTrash className="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -234,7 +338,7 @@ export function ExpenseTransactionsPage() {
                 ) : null}
             </div>
 
-            <Modal open={open} title="Add Transaction" onClose={() => setOpen(false)}>
+            <Modal open={open} title={editingId != null ? 'Edit Transaction' : 'Add Transaction'} onClose={() => { setOpen(false); setEditingId(null) }}>
                 <div className="space-y-4">
                     <div className="grid gap-3 md:grid-cols-2">
                         <label className="block">
@@ -242,7 +346,24 @@ export function ExpenseTransactionsPage() {
                             <select
                                 className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                                 value={form.txn_type}
-                                onChange={(e) => setForm((f) => ({ ...f, txn_type: e.target.value as any }))}
+                                onChange={(e) => {
+                                    const next = e.target.value as any
+                                    setForm((f) => {
+                                        if (next === 'income') {
+                                            return { ...f, txn_type: next, from_asset_id: null, liability_id: null }
+                                        }
+                                        if (next === 'expense') {
+                                            return { ...f, txn_type: next, to_asset_id: null, liability_id: null }
+                                        }
+                                        if (next === 'transfer') {
+                                            return { ...f, txn_type: next, liability_id: null }
+                                        }
+                                        if (next === 'liability_payment') {
+                                            return { ...f, txn_type: next, to_asset_id: null }
+                                        }
+                                        return { ...f, txn_type: next }
+                                    })
+                                }}
                             >
                                 <option value="income">Income</option>
                                 <option value="expense">Expense</option>
@@ -347,7 +468,7 @@ export function ExpenseTransactionsPage() {
                     <div className="flex justify-end gap-3">
                         <button
                             type="button"
-                            onClick={() => setOpen(false)}
+                            onClick={() => { setOpen(false); setEditingId(null) }}
                             className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
                         >
                             Cancel
@@ -355,9 +476,9 @@ export function ExpenseTransactionsPage() {
                         <button
                             type="button"
                             onClick={() => void submit()}
-                            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm transition hover:bg-zinc-800"
+                            className="rounded-lg border border-blue-500/30 bg-blue-600/20 px-3 py-2 text-sm text-zinc-50 transition hover:bg-blue-600/30"
                         >
-                            Create
+                            {editingId != null ? 'Save' : 'Create'}
                         </button>
                     </div>
                 </div>

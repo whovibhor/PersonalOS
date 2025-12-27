@@ -362,14 +362,15 @@ def create_transaction(payload: FinanceTransactionCreate, db: Session = Depends(
 
     primary = _get_primary_asset(db)
 
-    if txn_type in ("income", "expense") and (from_asset_id is None and to_asset_id is None):
+    # Default required account when missing (supports type switches from the UI)
+    if txn_type == "income" and to_asset_id is None:
         if not primary:
             primary = _ensure_primary_asset(db)
-        # income adds to to_asset; expense deducts from from_asset
-        if txn_type == "income":
-            to_asset_id = primary.id
-        else:
-            from_asset_id = primary.id
+        to_asset_id = primary.id
+    if txn_type == "expense" and from_asset_id is None:
+        if not primary:
+            primary = _ensure_primary_asset(db)
+        from_asset_id = primary.id
 
     if txn_type == "transfer":
         if from_asset_id is None or to_asset_id is None:
@@ -451,13 +452,16 @@ def update_transaction(txn_id: int, payload: FinanceTransactionUpdate, db: Sessi
     new_recurring_id = data.get("recurring_id", txn.recurring_id)
 
     primary = _get_primary_asset(db)
-    if new_txn_type in ("income", "expense") and (new_from_asset_id is None and new_to_asset_id is None):
+
+    # Default required account when missing (supports type switches)
+    if new_txn_type == "income" and new_to_asset_id is None:
         if not primary:
             primary = _ensure_primary_asset(db)
-        if new_txn_type == "income":
-            new_to_asset_id = primary.id
-        else:
-            new_from_asset_id = primary.id
+        new_to_asset_id = primary.id
+    if new_txn_type == "expense" and new_from_asset_id is None:
+        if not primary:
+            primary = _ensure_primary_asset(db)
+        new_from_asset_id = primary.id
 
     if new_txn_type == "transfer":
         if new_from_asset_id is None or new_to_asset_id is None:

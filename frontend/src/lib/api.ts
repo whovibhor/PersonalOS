@@ -163,6 +163,28 @@ export type FinanceTransactionCreate = {
     recurring_id?: number | null
 }
 
+export type FinanceTransactionUpdate = {
+    txn_type?: FinanceTransactionType
+    amount?: number
+    category?: string
+    description?: string | null
+    transacted_at?: string
+    from_asset_id?: number | null
+    to_asset_id?: number | null
+    liability_id?: number | null
+    recurring_id?: number | null
+}
+
+export type FinanceAuditLog = {
+    id: number
+    entity_type: string
+    entity_id: number | null
+    action: 'created' | 'updated' | 'deleted' | string
+    before_json: string | null
+    after_json: string | null
+    created_at: string
+}
+
 export type FinanceOccurrence = {
     id: number
     recurring_id: number
@@ -404,6 +426,14 @@ export async function createFinanceTransaction(payload: FinanceTransactionCreate
     return api<FinanceTransaction>('/api/expense/transactions', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+export async function updateFinanceTransaction(txnId: number, payload: FinanceTransactionUpdate) {
+    return api<FinanceTransaction>(`/api/expense/transactions/${txnId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function deleteFinanceTransaction(txnId: number) {
+    return api<void>(`/api/expense/transactions/${txnId}`, { method: 'DELETE' })
+}
+
 export async function listFinanceOccurrences(status?: string) {
     const qs = status ? `?status=${encodeURIComponent(status)}` : ''
     return api<FinanceOccurrence[]>(`/api/expense/occurrences${qs}`)
@@ -427,6 +457,16 @@ export async function getFinanceCategorySpend(year: number, month: number) {
 
 export async function getFinanceCashflow(lastNMonths = 6) {
     return api<FinanceCashflowPoint[]>(`/api/expense/analytics/cashflow?last_n_months=${lastNMonths}`)
+}
+
+export async function listFinanceHistory(params?: { entity_type?: string; entity_id?: number; limit?: number; offset?: number }) {
+    const qs = new URLSearchParams()
+    if (params?.entity_type) qs.set('entity_type', params.entity_type)
+    if (params?.entity_id != null) qs.set('entity_id', String(params.entity_id))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    if (params?.offset != null) qs.set('offset', String(params.offset))
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return api<FinanceAuditLog[]>(`/api/expense/history${suffix}`)
 }
 
 export async function listFinanceGoals(_includeInactive?: boolean) {

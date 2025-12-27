@@ -168,7 +168,7 @@ export function ExpenseGoalsPage() {
                         <input type="number" className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={form.target_amount} onChange={(e) => setForm((f) => ({ ...f, target_amount: Number(e.target.value) }))} />
                     </label>
                     <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Category</div>
+                        <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={form.category ?? ''} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} />
                     </label>
                     <div className="flex justify-end gap-3">
@@ -189,7 +189,7 @@ export function ExpenseGoalsPage() {
                         <input type="number" className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={editForm.target_amount ?? 0} onChange={(e) => setEditForm((f) => ({ ...f, target_amount: Number(e.target.value) }))} />
                     </label>
                     <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Category</div>
+                        <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={editForm.category ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))} />
                     </label>
                     <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2">

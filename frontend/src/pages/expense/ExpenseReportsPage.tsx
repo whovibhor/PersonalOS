@@ -110,7 +110,7 @@ export function ExpenseReportsPage() {
                         onClick={() => void exportJson()}
                         className="rounded-lg border border-blue-500/40 bg-blue-600/20 px-3 py-2 text-sm text-zinc-50 transition hover:bg-blue-600/30"
                     >
-                        Export PDF
+                        Export JSON
                     </button>
                 </div>
             </div>
@@ -170,7 +170,7 @@ export function ExpenseReportsPage() {
                 </div>
 
                 <div className="md:col-span-6 rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
-                    <div className="text-sm font-semibold">Spending categories</div>
+                    <div className="text-sm font-semibold">Spending tags</div>
                     <div className="mt-3 space-y-2">
                         {spend.slice(0, 10).map((s) => (
                             <div key={s.category} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2">

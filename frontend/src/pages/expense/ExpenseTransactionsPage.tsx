@@ -11,9 +11,36 @@ import {
 } from '../../lib/api'
 import type { FinanceAsset, FinanceLiability, FinanceTransaction, FinanceTransactionCreate, FinanceTransactionUpdate } from '../../lib/api'
 import { FINANCE_TAGS } from './financeTags'
-import * as XLSX from 'xlsx'
+import { FINANCE_PAYMENT_MODES } from './financePaymentModes'
 
-const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Bank Transfer', 'Cheque', 'Other'] as const
+const EXPORT_COLUMNS = [
+    'Date',
+    'Type',
+    'Amount',
+    'Tag',
+    'PaymentMode',
+    'Description',
+    'FromAccount',
+    'ToAccount',
+    'Liability',
+    'RecurringId',
+    'TransactionId',
+] as const
+
+const TAG_STYLES = [
+    'border-blue-500/30 bg-blue-500/10 text-blue-100 hover:bg-blue-500/15',
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/15',
+    'border-amber-500/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/15',
+    'border-violet-500/30 bg-violet-500/10 text-violet-100 hover:bg-violet-500/15',
+    'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-100 hover:bg-fuchsia-500/15',
+    'border-rose-500/30 bg-rose-500/10 text-rose-100 hover:bg-rose-500/15',
+] as const
+
+function tagStyle(tag: string) {
+    let h = 0
+    for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0
+    return TAG_STYLES[h % TAG_STYLES.length]
+}
 
 function money(n: number) {
     const sign = n < 0 ? '-' : ''
@@ -127,7 +154,7 @@ export function ExpenseTransactionsPage() {
     }
 
     function toExcelFriendlyCsv(rows: Array<Record<string, any>>) {
-        const header = Object.keys(rows[0] ?? {})
+        const header = [...EXPORT_COLUMNS]
         const escapeCell = (v: any) => {
             if (v == null) return ''
             const s = String(v)
@@ -178,14 +205,31 @@ export function ExpenseTransactionsPage() {
         downloadBlob(blob, `transactions-${new Date().toISOString().slice(0, 10)}.csv`)
     }
 
-    function exportXlsx() {
+    function escapeHtmlCell(v: any) {
+        const s = v == null ? '' : String(v)
+        return s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+    }
+
+    function exportExcel() {
         const rows = buildExportRows()
-        const ws = XLSX.utils.json_to_sheet(rows)
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, 'Transactions')
-        const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-        const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        downloadBlob(blob, `transactions-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        const thead = `<tr>${EXPORT_COLUMNS.map((c) => `<th>${escapeHtmlCell(c)}</th>`).join('')}</tr>`
+        const tbody = rows
+            .map((r) => `<tr>${EXPORT_COLUMNS.map((c) => `<td>${escapeHtmlCell(r[c] ?? '')}</td>`).join('')}</tr>`)
+            .join('')
+
+        const html = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>\n` +
+            `table{border-collapse:collapse;font-family:Arial, sans-serif;font-size:12px;}\n` +
+            `th,td{border:1px solid #ccc;padding:6px;}\n` +
+            `th{background:#f3f3f3;}\n` +
+            `</style>\n</head>\n<body>\n<table>\n<thead>${thead}</thead>\n<tbody>${tbody}</tbody>\n</table>\n</body>\n</html>`
+
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+        downloadBlob(blob, `transactions-${new Date().toISOString().slice(0, 10)}.xls`)
     }
 
     function openAdd() {
@@ -307,16 +351,18 @@ export function ExpenseTransactionsPage() {
                     />
                     <button
                         type="button"
+                        disabled={filtered.length === 0}
                         onClick={() => void exportCsv()}
-                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                        className={`inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900 ${filtered.length === 0 ? 'cursor-not-allowed opacity-50 hover:bg-zinc-950' : ''}`}
                     >
                         <IconDownload className="h-4 w-4" />
                         <span className="hidden sm:inline">CSV</span>
                     </button>
                     <button
                         type="button"
-                        onClick={() => void exportXlsx()}
-                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                        disabled={filtered.length === 0}
+                        onClick={() => void exportExcel()}
+                        className={`inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900 ${filtered.length === 0 ? 'cursor-not-allowed opacity-50 hover:bg-zinc-950' : ''}`}
                     >
                         <IconDownload className="h-4 w-4" />
                         <span className="hidden sm:inline">Excel</span>
@@ -448,16 +494,31 @@ export function ExpenseTransactionsPage() {
                     <label className="block">
                         <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input
-                            list="finance-tags"
                             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                             value={form.category}
                             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                            placeholder="Select a tag below or type your own"
                         />
-                        <datalist id="finance-tags">
-                            {FINANCE_TAGS.map((t) => (
-                                <option key={t} value={t} />
-                            ))}
-                        </datalist>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {FINANCE_TAGS.map((t) => {
+                                const selected = (form.category ?? '').trim() === t
+                                return (
+                                    <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setForm((f) => ({ ...f, category: selected ? '' : t }))}
+                                        className={
+                                            `rounded-full border px-3 py-1 text-xs transition ` +
+                                            (selected
+                                                ? 'border-zinc-200/30 bg-zinc-100/10 text-zinc-50'
+                                                : tagStyle(t))
+                                        }
+                                    >
+                                        {t}
+                                    </button>
+                                )
+                            })}
+                        </div>
                     </label>
 
                     <label className="block">
@@ -468,7 +529,7 @@ export function ExpenseTransactionsPage() {
                             onChange={(e) => setForm((f) => ({ ...f, payment_mode: e.target.value ? e.target.value : null }))}
                         >
                             <option value="">—</option>
-                            {PAYMENT_MODES.map((m) => (
+                            {FINANCE_PAYMENT_MODES.map((m) => (
                                 <option key={m} value={m}>
                                     {m}
                                 </option>

@@ -70,7 +70,7 @@ export function ExpenseBudgetPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <div className="text-lg font-semibold">Budget</div>
-                    <div className="mt-1 text-sm text-zinc-500">Monthly and category limits</div>
+                    <div className="mt-1 text-sm text-zinc-500">Monthly and tag limits</div>
                 </div>
                 <div className="flex items-center gap-2">
                     <input type="number" className="w-24 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={year} onChange={(e) => setYear(Number(e.target.value))} />
@@ -104,7 +104,7 @@ export function ExpenseBudgetPage() {
             </section>
 
             <section className="space-y-3">
-                <div className="text-sm font-semibold">Category budgets</div>
+                <div className="text-sm font-semibold">Tag budgets</div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                     {categories.map((c) => {
@@ -131,14 +131,14 @@ export function ExpenseBudgetPage() {
                             </div>
                         )
                     })}
-                    {categories.length === 0 ? <div className="text-sm text-zinc-500">No category budgets yet.</div> : null}
+                    {categories.length === 0 ? <div className="text-sm text-zinc-500">No tag budgets yet.</div> : null}
                 </div>
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-5">
-                    <div className="text-sm font-semibold">Add / Update Category Budget</div>
+                    <div className="text-sm font-semibold">Add / Update Tag Budget</div>
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                         <label className="block">
-                            <div className="mb-1 text-xs text-zinc-400">Category</div>
+                            <div className="mb-1 text-xs text-zinc-400">Tag</div>
                             <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={newCat.category} onChange={(e) => setNewCat((c) => ({ ...c, category: e.target.value }))} />
                         </label>
                         <label className="block">
@@ -147,7 +147,7 @@ export function ExpenseBudgetPage() {
                         </label>
                         <div className="flex items-end">
                             <button type="button" onClick={() => void addCategory().catch((e) => setError(e instanceof Error ? e.message : 'Failed'))} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900">
-                                + Add Category Budget
+                                + Add Tag Budget
                             </button>
                         </div>
                     </div>

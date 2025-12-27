@@ -455,8 +455,9 @@ export async function getFinanceCategorySpend(year: number, month: number) {
     return api<FinanceCategorySpend[]>(`/api/expense/analytics/category-spend?year=${year}&month=${month}`)
 }
 
-export async function getFinanceCashflow(lastNMonths = 6) {
-    return api<FinanceCashflowPoint[]>(`/api/expense/analytics/cashflow?last_n_months=${lastNMonths}`)
+export async function getFinanceCashflow(lastNMonths?: number) {
+    const suffix = lastNMonths != null ? `?last_n_months=${lastNMonths}` : ''
+    return api<FinanceCashflowPoint[]>(`/api/expense/analytics/cashflow${suffix}`)
 }
 
 export async function listFinanceHistory(params?: { entity_type?: string; entity_id?: number; limit?: number; offset?: number }) {

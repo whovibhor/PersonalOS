@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { createFinanceRecurring, createFinanceTransaction, listFinanceAssets, listFinanceGoals, listFinanceOccurrences, getFinanceCashflow, getFinanceCategorySpend, getFinanceDashboard } from '../../lib/api'
 import type { FinanceAsset, FinanceCashflowPoint, FinanceCategorySpend, FinanceDashboard, FinanceOccurrence, FinanceGoal, FinanceRecurringCreate, FinanceTransactionCreate } from '../../lib/api'
+import { FINANCE_TAGS } from './financeTags'
 
 import { Modal } from '../../components/Modal'
 
@@ -82,7 +83,7 @@ export function ExpenseDashboardPage() {
 
         Promise.all([
             getFinanceDashboard(),
-            getFinanceCashflow(6),
+            getFinanceCashflow(),
             getFinanceCategorySpend(year, month),
             listFinanceOccurrences('pending'),
             listFinanceGoals(true),
@@ -112,7 +113,7 @@ export function ExpenseDashboardPage() {
     async function reloadCore() {
         const [d, cf, cs, occ, gs, a] = await Promise.all([
             getFinanceDashboard(),
-            getFinanceCashflow(6),
+            getFinanceCashflow(),
             getFinanceCategorySpend(year, month),
             listFinanceOccurrences('pending'),
             listFinanceGoals(true),
@@ -218,9 +219,9 @@ export function ExpenseDashboardPage() {
                             <div className="text-xs text-zinc-500">Last {cashflow.length || 6} months</div>
                         </div>
                     </div>
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
                         {cashflow.map((p) => (
-                            <div key={p.month} className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2">
+                            <div key={p.month} className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-1.5">
                                 <div className="text-xs text-zinc-400">{p.month}</div>
                                 <div className="flex items-center gap-3 text-xs">
                                     <span className="text-emerald-200">+{money(Number(p.income))}</span>
@@ -292,7 +293,7 @@ export function ExpenseDashboardPage() {
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <div className="text-sm font-semibold">Spending Breakdown</div>
+                        <div className="text-sm font-semibold">Tag Breakdown</div>
                         <div className="text-xs text-zinc-500">This month</div>
                     </div>
                     <Link to="/expense/transactions" className="text-xs text-blue-200/80 hover:text-blue-200">View All →</Link>
@@ -337,12 +338,18 @@ export function ExpenseDashboardPage() {
                     </div>
 
                     <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Category</div>
+                        <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input
+                            list="finance-tags"
                             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                             value={txnForm.category}
                             onChange={(e) => setTxnForm((f) => ({ ...f, category: e.target.value }))}
                         />
+                        <datalist id="finance-tags">
+                            {FINANCE_TAGS.map((t) => (
+                                <option key={t} value={t} />
+                            ))}
+                        </datalist>
                     </label>
 
                     <label className="block">
@@ -372,7 +379,7 @@ export function ExpenseDashboardPage() {
                                 value={txnForm.from_asset_id ?? ''}
                                 onChange={(e) => setTxnForm((f) => ({ ...f, from_asset_id: e.target.value ? Number(e.target.value) : null }))}
                             >
-                                <option value="">(primary if empty)</option>
+                                <option value="">Primary Account</option>
                                 {assets.map((a) => (
                                     <option key={a.id} value={a.id}>
                                         {a.name}{a.is_primary ? ' (primary)' : ''}
@@ -390,7 +397,7 @@ export function ExpenseDashboardPage() {
                                 value={txnForm.to_asset_id ?? ''}
                                 onChange={(e) => setTxnForm((f) => ({ ...f, to_asset_id: e.target.value ? Number(e.target.value) : null }))}
                             >
-                                <option value="">(primary if empty)</option>
+                                <option value="">Primary Account</option>
                                 {assets.map((a) => (
                                     <option key={a.id} value={a.id}>
                                         {a.name}{a.is_primary ? ' (primary)' : ''}
@@ -455,8 +462,9 @@ export function ExpenseDashboardPage() {
                     </div>
 
                     <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Category</div>
+                        <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input
+                            list="finance-tags"
                             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                             value={billForm.category}
                             onChange={(e) => setBillForm((f) => ({ ...f, category: e.target.value }))}

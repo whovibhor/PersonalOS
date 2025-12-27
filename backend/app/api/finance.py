@@ -307,7 +307,7 @@ def _ensure_primary_asset(db: Session) -> FinanceAsset:
 
     # First-time setup: create a sensible default account so transactions can work.
     created = FinanceAsset(
-        name="Cash",
+        name="Primary Account",
         asset_type="cash",
         asset_subtype=None,
         currency="INR",
@@ -912,15 +912,29 @@ def category_spend(year: int, month: int, db: Session = Depends(get_db)):
 
 
 @router.get("/analytics/cashflow", response_model=list[FinanceCashflowPointOut])
-def cashflow(last_n_months: int = 6, db: Session = Depends(get_db)):
-    # Simple monthly rollup based on UTC timestamps
+def cashflow(last_n_months: int | None = None, db: Session = Depends(get_db)):
+    # Monthly rollup based on UTC timestamps.
+    # Default: start from the first transaction month (avoids empty past months).
     now = datetime.utcnow()
-    # compute start month
-    start_year = now.year
-    start_month = now.month - (last_n_months - 1)
-    while start_month <= 0:
-        start_month += 12
-        start_year -= 1
+
+    first_txn_at = db.execute(select(func.min(FinanceTransaction.transacted_at))).scalar()
+    if not first_txn_at:
+        return []
+
+    start_year = first_txn_at.year
+    start_month = first_txn_at.month
+
+    if last_n_months is not None:
+        last_n_months = max(1, min(240, last_n_months))
+        window_year = now.year
+        window_month = now.month - (last_n_months - 1)
+        while window_month <= 0:
+            window_month += 12
+            window_year -= 1
+
+        # Use whichever is later: first transaction month OR requested window.
+        if (window_year, window_month) > (start_year, start_month):
+            start_year, start_month = window_year, window_month
 
     start = datetime(start_year, start_month, 1)
 
@@ -944,10 +958,13 @@ def cashflow(last_n_months: int = 6, db: Session = Depends(get_db)):
     income_rows = {r.month: r.income for r in db.execute(income_stmt).all()}
     expense_rows = {r.month: r.expense for r in db.execute(expense_stmt).all()}
 
-    # build continuous months
+    # build continuous months from start to current month (inclusive)
     out: list[FinanceCashflowPointOut] = []
+    months = (now.year - start_year) * 12 + (now.month - start_month) + 1
+    months = max(1, min(240, months))
+
     y, m = start_year, start_month
-    for _ in range(last_n_months):
+    for _ in range(months):
         key = f"{y:04d}-{m:02d}"
         inc = income_rows.get(key, 0)
         exp = expense_rows.get(key, 0)

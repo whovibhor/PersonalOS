@@ -10,6 +10,7 @@ import {
     updateFinanceTransaction,
 } from '../../lib/api'
 import type { FinanceAsset, FinanceLiability, FinanceTransaction, FinanceTransactionCreate, FinanceTransactionUpdate } from '../../lib/api'
+import { FINANCE_TAGS } from './financeTags'
 
 function money(n: number) {
     const sign = n < 0 ? '-' : ''
@@ -76,7 +77,7 @@ export function ExpenseTransactionsPage() {
     const [form, setForm] = useState<FinanceTransactionCreate>(() => ({
         txn_type: 'expense',
         amount: 0,
-        category: 'General',
+        category: '',
         description: '',
         transacted_at: new Date().toISOString(),
         from_asset_id: null,
@@ -384,12 +385,18 @@ export function ExpenseTransactionsPage() {
                     </div>
 
                     <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Category</div>
+                        <div className="mb-1 text-xs text-zinc-400">Tag</div>
                         <input
+                            list="finance-tags"
                             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                             value={form.category}
                             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                         />
+                        <datalist id="finance-tags">
+                            {FINANCE_TAGS.map((t) => (
+                                <option key={t} value={t} />
+                            ))}
+                        </datalist>
                     </label>
 
                     <label className="block">
@@ -419,7 +426,7 @@ export function ExpenseTransactionsPage() {
                                 value={form.from_asset_id ?? ''}
                                 onChange={(e) => setForm((f) => ({ ...f, from_asset_id: e.target.value ? Number(e.target.value) : null }))}
                             >
-                                <option value="">(primary if empty)</option>
+                                <option value="">Primary Account</option>
                                 {assets.map((a) => (
                                     <option key={a.id} value={a.id}>
                                         {a.name}{a.is_primary ? ' (primary)' : ''}
@@ -437,7 +444,7 @@ export function ExpenseTransactionsPage() {
                                 value={form.to_asset_id ?? ''}
                                 onChange={(e) => setForm((f) => ({ ...f, to_asset_id: e.target.value ? Number(e.target.value) : null }))}
                             >
-                                <option value="">(primary if empty)</option>
+                                <option value="">Primary Account</option>
                                 {assets.map((a) => (
                                     <option key={a.id} value={a.id}>
                                         {a.name}{a.is_primary ? ' (primary)' : ''}

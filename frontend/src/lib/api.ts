@@ -238,6 +238,8 @@ export type FinanceRecurringCreate = {
     liability_id?: number | null
 }
 
+export type FinanceRecurringUpdate = Partial<FinanceRecurringCreate>
+
 export type FinanceGoal = {
     id: number
     name: string
@@ -450,6 +452,14 @@ export async function createFinanceRecurring(payload: FinanceRecurringCreate) {
     return api<FinanceRecurringRule>('/api/expense/recurring', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+export async function updateFinanceRecurring(ruleId: number, payload: FinanceRecurringUpdate) {
+    return api<FinanceRecurringRule>(`/api/expense/recurring/${ruleId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function postFinanceOccurrence(occurrenceId: number) {
+    return api<FinanceTransaction>(`/api/expense/occurrences/${occurrenceId}/post`, { method: 'POST' })
+}
+
 export async function getFinanceDashboard() {
     return api<FinanceDashboard>('/api/expense/dashboard')
 }
@@ -484,6 +494,10 @@ export async function createFinanceGoal(payload: FinanceGoalCreate) {
 
 export async function updateFinanceGoal(goalId: number, payload: FinanceGoalUpdate) {
     return api<FinanceGoal>(`/api/expense/goals/${goalId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function deleteFinanceGoal(goalId: number) {
+    return api<void>(`/api/expense/goals/${goalId}`, { method: 'DELETE' })
 }
 
 export async function listFinanceMonthlyBudgets() {

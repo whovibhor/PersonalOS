@@ -105,12 +105,13 @@ export function AppShell({ variant }: AppShellProps) {
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
                             <div className="px-3 pb-2 text-xs font-semibold tracking-wide text-zinc-400">NET WORTH</div>
                             <NavItem to="/expense" label="Dashboard" end />
-                            <NavItem to="/expense/history" label="History" end />
                             <NavItem to="/expense/transactions" label="Transactions" end />
+                            <NavItem to="/expense/bills" label="Bills" end />
                             <NavItem to="/expense/assets" label="Assets & Debts" end />
                             <NavItem to="/expense/budget" label="Budget" end />
                             <NavItem to="/expense/goals" label="Goals" end />
                             <NavItem to="/expense/reports" label="Reports" end />
+                            <NavItem to="/expense/history" label="History" end />
                         </div>
                     </aside>
                 ) : null}

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
+import calendar
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from ..db.session import get_db
@@ -38,6 +39,7 @@ from ..schemas.finance import (
     FinanceOccurrenceOut,
     FinanceOccurrenceDetailedOut,
     FinanceRecurringCreate,
+    FinanceRecurringUpdate,
     FinanceRecurringOut,
     FinanceTransactionCreate,
     FinanceTransactionUpdate,
@@ -45,6 +47,25 @@ from ..schemas.finance import (
 )
 
 router = APIRouter(prefix="/expense", tags=["expense"])
+
+
+def _next_due_date(rule: FinanceRecurringRule, from_date: date) -> date:
+    if rule.schedule == "daily":
+        return from_date + timedelta(days=1)
+    if rule.schedule == "weekly":
+        return from_date + timedelta(days=7)
+    if rule.schedule == "monthly":
+        year = from_date.year
+        month = from_date.month + 1
+        if month == 13:
+            month = 1
+            year += 1
+        day = rule.day_of_month or from_date.day
+        last_day = calendar.monthrange(year, month)[1]
+        day = min(max(1, int(day)), last_day)
+        return date(year, month, day)
+    # Should never happen (validated by schema)
+    return from_date
 
 
 def _json_dumps(v) -> str:
@@ -580,6 +601,104 @@ def create_recurring(payload: FinanceRecurringCreate, db: Session = Depends(get_
     return rule
 
 
+@router.patch("/recurring/{rule_id}", response_model=FinanceRecurringOut)
+def update_recurring(rule_id: int, payload: FinanceRecurringUpdate, db: Session = Depends(get_db)):
+    rule = db.get(FinanceRecurringRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Recurring rule not found")
+
+    before = _json_dumps(
+        _model_dict(
+            rule,
+            [
+                "id",
+                "name",
+                "txn_type",
+                "amount",
+                "category",
+                "description",
+                "schedule",
+                "day_of_month",
+                "day_of_week",
+                "next_due_date",
+                "auto_create",
+                "is_active",
+                "asset_id",
+                "liability_id",
+                "created_at",
+                "updated_at",
+            ],
+        )
+    )
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(rule, k, v)
+
+    # Best-effort: if schedule changed, keep irrelevant day fields cleared.
+    if rule.schedule == "monthly":
+        rule.day_of_week = None
+    if rule.schedule == "weekly":
+        rule.day_of_month = None
+    if rule.schedule == "daily":
+        rule.day_of_month = None
+        rule.day_of_week = None
+
+    rule.updated_at = datetime.utcnow()
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+
+    # Keep the next pending occurrence due_date aligned with rule.next_due_date.
+    pending = (
+        db.execute(
+            select(FinanceRecurringOccurrence)
+            .where(FinanceRecurringOccurrence.recurring_id == rule.id, FinanceRecurringOccurrence.status == "pending")
+            .order_by(FinanceRecurringOccurrence.due_date.asc(), FinanceRecurringOccurrence.id.asc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if pending:
+        pending.due_date = rule.next_due_date
+        db.add(pending)
+        db.commit()
+
+    _audit(
+        db,
+        entity_type="recurring_rule",
+        entity_id=rule.id,
+        action="updated",
+        before_json=before,
+        after_json=_json_dumps(
+            _model_dict(
+                rule,
+                [
+                    "id",
+                    "name",
+                    "txn_type",
+                    "amount",
+                    "category",
+                    "description",
+                    "schedule",
+                    "day_of_month",
+                    "day_of_week",
+                    "next_due_date",
+                    "auto_create",
+                    "is_active",
+                    "asset_id",
+                    "liability_id",
+                    "created_at",
+                    "updated_at",
+                ],
+            )
+        ),
+    )
+
+    return rule
+
+
 @router.get("/occurrences", response_model=list[FinanceOccurrenceDetailedOut])
 def list_occurrences(status: str | None = None, db: Session = Depends(get_db)):
     stmt = (
@@ -608,6 +727,68 @@ def list_occurrences(status: str | None = None, db: Session = Depends(get_db)):
             )
         )
     return out
+
+
+@router.post("/occurrences/{occurrence_id}/post", response_model=FinanceTransactionOut, status_code=201)
+def post_occurrence(occurrence_id: int, db: Session = Depends(get_db)):
+    occ = db.get(FinanceRecurringOccurrence, occurrence_id)
+    if not occ:
+        raise HTTPException(status_code=404, detail="Occurrence not found")
+    if occ.transaction_id is not None or occ.status != "pending":
+        raise HTTPException(status_code=400, detail="Occurrence already posted")
+
+    rule = db.get(FinanceRecurringRule, occ.recurring_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Recurring rule not found")
+    if not rule.is_active:
+        raise HTTPException(status_code=400, detail="Rule is inactive")
+
+    if rule.txn_type == "transfer":
+        raise HTTPException(status_code=400, detail="Posting transfer occurrences is not supported")
+
+    # Create the underlying transaction
+    transacted_at = datetime.combine(occ.due_date, time.min)
+    payload = FinanceTransactionCreate(
+        txn_type=rule.txn_type,
+        amount=rule.amount,
+        category=rule.category,
+        payment_mode=None,
+        description=rule.description or rule.name,
+        transacted_at=transacted_at,
+        from_asset_id=rule.asset_id if rule.txn_type in ["expense", "liability_payment"] else None,
+        to_asset_id=rule.asset_id if rule.txn_type == "income" else None,
+        liability_id=rule.liability_id,
+        recurring_id=rule.id,
+    )
+
+    txn = create_transaction(payload, db)
+
+    # Mark occurrence as posted
+    before_occ = _json_dumps(_model_dict(occ, ["id", "recurring_id", "due_date", "status", "transaction_id", "created_at"]))
+    occ.transaction_id = txn.id
+    occ.status = "posted"
+    db.add(occ)
+
+    # Roll forward next occurrence
+    next_due = _next_due_date(rule, occ.due_date)
+    rule.next_due_date = next_due
+    rule.updated_at = datetime.utcnow()
+    db.add(rule)
+
+    next_occ = FinanceRecurringOccurrence(recurring_id=rule.id, due_date=next_due, status="pending")
+    db.add(next_occ)
+    db.commit()
+
+    _audit(
+        db,
+        entity_type="occurrence",
+        entity_id=occ.id,
+        action="posted",
+        before_json=before_occ,
+        after_json=_json_dumps(_model_dict(occ, ["id", "recurring_id", "due_date", "status", "transaction_id", "created_at"]))
+    )
+
+    return txn
 
 
 # --- Budgets ---
@@ -775,6 +956,30 @@ def update_goal(goal_id: int, payload: FinanceGoalUpdate, db: Session = Depends(
         after_json=_json_dumps(_model_dict(goal, ["id", "name", "description", "target_amount", "current_amount", "category", "target_date", "is_active", "created_at", "updated_at"])),
     )
     return goal
+
+
+@router.delete("/goals/{goal_id}", status_code=204)
+def delete_goal(goal_id: int, db: Session = Depends(get_db)):
+    goal = db.get(FinanceGoal, goal_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    before = _json_dumps(_model_dict(goal, ["id", "name", "description", "target_amount", "current_amount", "category", "target_date", "is_active", "created_at", "updated_at"]))
+
+    # Clean up allocations first to avoid FK constraint issues.
+    db.execute(delete(FinanceGoalAllocation).where(FinanceGoalAllocation.goal_id == goal_id))
+    db.delete(goal)
+    db.commit()
+
+    _audit(
+        db,
+        entity_type="goal",
+        entity_id=goal_id,
+        action="deleted",
+        before_json=before,
+        after_json=None,
+    )
+    return None
 
 
 @router.get("/goal-allocations", response_model=list[FinanceGoalAllocationOut])

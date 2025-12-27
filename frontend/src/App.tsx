@@ -8,6 +8,7 @@ import { HabitsPage } from './pages/HabitsPage'
 import { NotesPage } from './pages/NotesPage'
 import { TodoPage } from './pages/TodoPage'
 import { ExpenseAssetsPage } from './pages/expense/ExpenseAssetsPage'
+import { ExpenseBillsPage } from './pages/expense/ExpenseBillsPage'
 import { ExpenseBudgetPage } from './pages/expense/ExpenseBudgetPage'
 import { ExpenseDashboardPage } from './pages/expense/ExpenseDashboardPage'
 import { ExpenseHistoryPage } from './pages/expense/ExpenseHistoryPage'
@@ -42,12 +43,13 @@ function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
 
           <Route path="/expense" element={<ExpenseDashboardPage />} />
-          <Route path="/expense/history" element={<ExpenseHistoryPage />} />
           <Route path="/expense/transactions" element={<ExpenseTransactionsPage />} />
+          <Route path="/expense/bills" element={<ExpenseBillsPage />} />
           <Route path="/expense/assets" element={<ExpenseAssetsPage />} />
           <Route path="/expense/budget" element={<ExpenseBudgetPage />} />
           <Route path="/expense/goals" element={<ExpenseGoalsPage />} />
           <Route path="/expense/reports" element={<ExpenseReportsPage />} />
+          <Route path="/expense/history" element={<ExpenseHistoryPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -166,6 +166,25 @@ class FinanceRecurringCreate(BaseModel):
     liability_id: int | None = None
 
 
+class FinanceRecurringUpdate(BaseModel):
+    name: str | None = None
+    txn_type: TxnType | None = None
+    amount: Decimal | None = None
+    category: str | None = None
+    description: str | None = None
+
+    schedule: Schedule | None = None
+    day_of_month: int | None = None
+    day_of_week: int | None = None
+    next_due_date: date | None = None
+
+    auto_create: bool | None = None
+    is_active: bool | None = None
+
+    asset_id: int | None = None
+    liability_id: int | None = None
+
+
 class FinanceRecurringOut(BaseModel):
     id: int
     name: str

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { Modal } from '../../components/Modal'
-import { createFinanceGoal, listFinanceGoals, updateFinanceGoal } from '../../lib/api'
+import { createFinanceGoal, deleteFinanceGoal, listFinanceGoals, updateFinanceGoal } from '../../lib/api'
 import type { FinanceGoal, FinanceGoalCreate, FinanceGoalUpdate } from '../../lib/api'
 
 function money(n: number) {
@@ -87,6 +87,21 @@ export function ExpenseGoalsPage() {
             await reload()
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to update goal')
+        }
+    }
+
+    async function remove(goalId: number) {
+        const ok = window.confirm('Delete this goal?')
+        if (!ok) return
+        setError(null)
+        try {
+            await deleteFinanceGoal(goalId)
+            setEditOpen(false)
+            setEditGoalId(null)
+            setEditForm({})
+            await reload()
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to delete goal')
         }
     }
 
@@ -200,6 +215,15 @@ export function ExpenseGoalsPage() {
                         <input type="checkbox" checked={Boolean(editForm.is_active)} onChange={(e) => setEditForm((f) => ({ ...f, is_active: e.target.checked }))} />
                     </label>
                     <div className="flex justify-end gap-3">
+                        {editGoalId != null ? (
+                            <button
+                                type="button"
+                                onClick={() => void remove(editGoalId)}
+                                className="rounded-lg border border-red-500/30 bg-red-600/10 px-3 py-2 text-sm text-red-200 transition hover:bg-red-600/20"
+                            >
+                                Delete
+                            </button>
+                        ) : null}
                         <button type="button" onClick={() => { setEditOpen(false); setEditGoalId(null); setEditForm({}) }} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900">Cancel</button>
                         <button type="button" onClick={() => void submitEdit()} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm transition hover:bg-zinc-800">Save</button>
                     </div>

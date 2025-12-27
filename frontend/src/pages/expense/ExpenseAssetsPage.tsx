@@ -7,6 +7,7 @@ import {
     listFinanceAssets,
     listFinanceLiabilities,
     updateFinanceAsset,
+    updateFinanceLiability,
 } from '../../lib/api'
 import type { FinanceAsset, FinanceAssetCreate, FinanceLiability, FinanceLiabilityCreate } from '../../lib/api'
 
@@ -23,6 +24,17 @@ export function ExpenseAssetsPage() {
 
     const [addingAsset, setAddingAsset] = useState(false)
     const [addingLiability, setAddingLiability] = useState(false)
+
+    const [editingAsset, setEditingAsset] = useState<FinanceAsset | null>(null)
+    const [editingLiability, setEditingLiability] = useState<FinanceLiability | null>(null)
+
+    const [assetEditName, setAssetEditName] = useState('')
+    const [assetEditType, setAssetEditType] = useState('')
+    const [assetEditBalance, setAssetEditBalance] = useState(0)
+
+    const [liabilityEditName, setLiabilityEditName] = useState('')
+    const [liabilityEditType, setLiabilityEditType] = useState('')
+    const [liabilityEditBalance, setLiabilityEditBalance] = useState(0)
 
     const [assetForm, setAssetForm] = useState<FinanceAssetCreate>({
         name: 'HDFC Bank',
@@ -70,6 +82,20 @@ export function ExpenseAssetsPage() {
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to set primary')
         }
+    }
+
+    function openEditAsset(a: FinanceAsset) {
+        setEditingAsset(a)
+        setAssetEditName(a.name)
+        setAssetEditType(a.asset_type)
+        setAssetEditBalance(Number(a.balance))
+    }
+
+    function openEditLiability(l: FinanceLiability) {
+        setEditingLiability(l)
+        setLiabilityEditName(l.name)
+        setLiabilityEditType(l.liability_type)
+        setLiabilityEditBalance(Number(l.balance))
     }
 
     const totalAssets = assets.reduce((s, a) => s + Number(a.balance), 0)
@@ -149,15 +175,24 @@ export function ExpenseAssetsPage() {
                                 </div>
                                 <div className="text-right">
                                     <div className="text-2xl font-semibold">{money(Number(a.balance))}</div>
-                                    {!a.is_primary ? (
+                                    <div className="mt-3 flex justify-end gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => void setPrimary(a.id)}
-                                            className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 transition hover:bg-zinc-900"
+                                            onClick={() => openEditAsset(a)}
+                                            className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 transition hover:bg-zinc-900"
                                         >
-                                            Set Primary
+                                            Edit
                                         </button>
-                                    ) : null}
+                                        {!a.is_primary ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => void setPrimary(a.id)}
+                                                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 transition hover:bg-zinc-900"
+                                            >
+                                                Set Primary
+                                            </button>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -182,6 +217,15 @@ export function ExpenseAssetsPage() {
                                 <div className="text-right">
                                     <div className="text-2xl font-semibold text-red-200">{money(Number(l.balance))}</div>
                                     {l.minimum_payment ? <div className="mt-2 text-xs text-zinc-500">Min: {money(Number(l.minimum_payment))}</div> : null}
+                                    <div className="mt-3 flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => openEditLiability(l)}
+                                            className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 transition hover:bg-zinc-900"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -189,6 +233,88 @@ export function ExpenseAssetsPage() {
                     {liabilities.length === 0 ? <div className="text-sm text-zinc-500">No debts yet.</div> : null}
                 </div>
             )}
+
+            <Modal open={!!editingAsset} title="Edit Asset" onClose={() => setEditingAsset(null)}>
+                <div className="space-y-3">
+                    <label className="block">
+                        <div className="mb-1 text-xs text-zinc-400">Name</div>
+                        <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={assetEditName} onChange={(e) => setAssetEditName(e.target.value)} />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                            <div className="mb-1 text-xs text-zinc-400">Type</div>
+                            <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={assetEditType} onChange={(e) => setAssetEditType(e.target.value)} />
+                        </label>
+                        <label className="block">
+                            <div className="mb-1 text-xs text-zinc-400">Balance</div>
+                            <input type="number" className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={assetEditBalance} onChange={(e) => setAssetEditBalance(Number(e.target.value))} />
+                        </label>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                        <button type="button" onClick={() => setEditingAsset(null)} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900">Cancel</button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!editingAsset) return
+                                setError(null)
+                                updateFinanceAsset(editingAsset.id, {
+                                    name: assetEditName,
+                                    asset_type: assetEditType,
+                                    balance: assetEditBalance,
+                                })
+                                    .then(() => reload())
+                                    .then(() => setEditingAsset(null))
+                                    .catch((e) => setError(e instanceof Error ? e.message : 'Failed to update asset'))
+                            }}
+                            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm transition hover:bg-zinc-800"
+                        >
+                            Save
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={!!editingLiability} title="Edit Debt" onClose={() => setEditingLiability(null)}>
+                <div className="space-y-3">
+                    <label className="block">
+                        <div className="mb-1 text-xs text-zinc-400">Name</div>
+                        <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={liabilityEditName} onChange={(e) => setLiabilityEditName(e.target.value)} />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                            <div className="mb-1 text-xs text-zinc-400">Type</div>
+                            <input className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={liabilityEditType} onChange={(e) => setLiabilityEditType(e.target.value)} />
+                        </label>
+                        <label className="block">
+                            <div className="mb-1 text-xs text-zinc-400">Balance</div>
+                            <input type="number" className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm" value={liabilityEditBalance} onChange={(e) => setLiabilityEditBalance(Number(e.target.value))} />
+                        </label>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                        <button type="button" onClick={() => setEditingLiability(null)} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900">Cancel</button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!editingLiability) return
+                                setError(null)
+                                updateFinanceLiability(editingLiability.id, {
+                                    name: liabilityEditName,
+                                    liability_type: liabilityEditType,
+                                    balance: liabilityEditBalance,
+                                })
+                                    .then(() => reload())
+                                    .then(() => setEditingLiability(null))
+                                    .catch((e) => setError(e instanceof Error ? e.message : 'Failed to update debt'))
+                            }}
+                            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm transition hover:bg-zinc-800"
+                        >
+                            Save
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             <Modal open={addingAsset} title="Add Asset" onClose={() => setAddingAsset(false)}>
                 <div className="space-y-3">

@@ -130,15 +130,6 @@ export function ExpenseTransactionsPage() {
         })
     }, [q, tab, txns])
 
-    const total = useMemo(
-        () =>
-            filtered.reduce(
-                (s, t) => s + (t.txn_type === 'income' ? Number(t.amount) : -Number(t.amount)),
-                0
-            ),
-        [filtered]
-    )
-
     const totalAbs = useMemo(
         () => filtered.reduce((s, t) => s + Number(t.amount), 0),
         [filtered]
@@ -378,8 +369,6 @@ export function ExpenseTransactionsPage() {
                 </div>
             </div>
 
-            <div className="text-sm text-zinc-400">Net flow: {money(total)}</div>
-
             {error ? <div className="text-sm text-red-300">{error}</div> : null}
 
             <div className="space-y-2">
@@ -448,7 +437,7 @@ export function ExpenseTransactionsPage() {
 
             <Modal open={open} title={editingId != null ? 'Edit Transaction' : 'Add Transaction'} onClose={() => { setOpen(false); setEditingId(null) }}>
                 <div className="space-y-4">
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                         <label className="block">
                             <div className="mb-1 text-xs text-zinc-400">Type</div>
                             <select
@@ -489,6 +478,22 @@ export function ExpenseTransactionsPage() {
                                 onChange={(e) => setForm((f) => ({ ...f, amount: Number(e.target.value) }))}
                             />
                         </label>
+
+                        <label className="block">
+                            <div className="mb-1 text-xs text-zinc-400">Payment Mode</div>
+                            <select
+                                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                                value={form.payment_mode ?? ''}
+                                onChange={(e) => setForm((f) => ({ ...f, payment_mode: e.target.value ? e.target.value : null }))}
+                            >
+                                <option value="">—</option>
+                                {FINANCE_PAYMENT_MODES.map((m) => (
+                                    <option key={m} value={m}>
+                                        {m}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
                     </div>
 
                     <label className="block">
@@ -519,22 +524,6 @@ export function ExpenseTransactionsPage() {
                                 )
                             })}
                         </div>
-                    </label>
-
-                    <label className="block">
-                        <div className="mb-1 text-xs text-zinc-400">Payment Mode</div>
-                        <select
-                            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                            value={form.payment_mode ?? ''}
-                            onChange={(e) => setForm((f) => ({ ...f, payment_mode: e.target.value ? e.target.value : null }))}
-                        >
-                            <option value="">—</option>
-                            {FINANCE_PAYMENT_MODES.map((m) => (
-                                <option key={m} value={m}>
-                                    {m}
-                                </option>
-                            ))}
-                        </select>
                     </label>
 
                     <label className="block">

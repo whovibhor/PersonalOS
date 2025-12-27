@@ -99,9 +99,6 @@ export function AppShell({ variant }: AppShellProps) {
                             <NavItem to="/expense" label="Net Worth" />
                             <NavItem to="/analytics" label="Analytics" />
                         </div>
-                        <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/10 px-3 py-3 text-xs text-zinc-500">
-                            Single-user mode
-                        </div>
                     </aside>
                 ) : variant === 'page' && inExpenseModule ? (
                     <aside className="hidden w-64 shrink-0 md:block">
@@ -114,10 +111,6 @@ export function AppShell({ variant }: AppShellProps) {
                             <NavItem to="/expense/budget" label="Budget" end />
                             <NavItem to="/expense/goals" label="Goals" end />
                             <NavItem to="/expense/reports" label="Reports" end />
-                        </div>
-
-                        <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/10 px-3 py-3 text-xs text-zinc-500">
-                            Single-user mode
                         </div>
                     </aside>
                 ) : null}

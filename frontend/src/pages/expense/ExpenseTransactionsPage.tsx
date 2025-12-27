@@ -11,6 +11,9 @@ import {
 } from '../../lib/api'
 import type { FinanceAsset, FinanceLiability, FinanceTransaction, FinanceTransactionCreate, FinanceTransactionUpdate } from '../../lib/api'
 import { FINANCE_TAGS } from './financeTags'
+import * as XLSX from 'xlsx'
+
+const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Bank Transfer', 'Cheque', 'Other'] as const
 
 function money(n: number) {
     const sign = n < 0 ? '-' : ''
@@ -78,6 +81,7 @@ export function ExpenseTransactionsPage() {
         txn_type: 'expense',
         amount: 0,
         category: '',
+        payment_mode: null,
         description: '',
         transacted_at: new Date().toISOString(),
         from_asset_id: null,
@@ -113,28 +117,75 @@ export function ExpenseTransactionsPage() {
         [filtered]
     )
 
-    function exportCsv() {
-        const rows = filtered.map((t) => ({
-            id: t.id,
-            type: t.txn_type,
-            amount: Number(t.amount),
-            category: t.category,
-            description: t.description ?? '',
-            transacted_at: t.transacted_at,
-        }))
-        const header = Object.keys(rows[0] ?? { id: '', type: '', amount: '', category: '', description: '', transacted_at: '' })
-        const csv = [
-            header.join(','),
-            ...rows.map((r) => header.map((k) => JSON.stringify((r as any)[k] ?? '')).join(',')),
-        ].join('\n')
-
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    function downloadBlob(blob: Blob, filename: string) {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`
+        a.download = filename
         a.click()
         URL.revokeObjectURL(url)
+    }
+
+    function toExcelFriendlyCsv(rows: Array<Record<string, any>>) {
+        const header = Object.keys(rows[0] ?? {})
+        const escapeCell = (v: any) => {
+            if (v == null) return ''
+            const s = String(v)
+            // Quote if needed; double quotes inside fields.
+            if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+            return s
+        }
+
+        const lines = [
+            header.map(escapeCell).join(','),
+            ...rows.map((r) => header.map((k) => escapeCell(r[k])).join(',')),
+        ]
+
+        // UTF-8 BOM helps Excel recognize UTF-8.
+        return `\uFEFF${lines.join('\r\n')}`
+    }
+
+    function buildExportRows() {
+        const assetNameById = new Map<number, string>()
+        for (const a of assets) assetNameById.set(a.id, a.name)
+        const liabilityNameById = new Map<number, string>()
+        for (const l of liabilities) liabilityNameById.set(l.id, l.name)
+
+        return filtered.map((t) => {
+            const fromAccount = t.from_asset_id != null ? assetNameById.get(t.from_asset_id) ?? String(t.from_asset_id) : ''
+            const toAccount = t.to_asset_id != null ? assetNameById.get(t.to_asset_id) ?? String(t.to_asset_id) : ''
+            const liability = t.liability_id != null ? liabilityNameById.get(t.liability_id) ?? String(t.liability_id) : ''
+            return {
+                Date: new Date(t.transacted_at).toISOString().slice(0, 10),
+                Type: t.txn_type,
+                Amount: Number(t.amount),
+                Tag: t.category,
+                PaymentMode: t.payment_mode ?? '',
+                Description: t.description ?? '',
+                FromAccount: fromAccount,
+                ToAccount: toAccount,
+                Liability: liability,
+                RecurringId: t.recurring_id ?? '',
+                TransactionId: t.id,
+            }
+        })
+    }
+
+    function exportCsv() {
+        const rows = buildExportRows()
+        const csv = toExcelFriendlyCsv(rows)
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+        downloadBlob(blob, `transactions-${new Date().toISOString().slice(0, 10)}.csv`)
+    }
+
+    function exportXlsx() {
+        const rows = buildExportRows()
+        const ws = XLSX.utils.json_to_sheet(rows)
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Transactions')
+        const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+        const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        downloadBlob(blob, `transactions-${new Date().toISOString().slice(0, 10)}.xlsx`)
     }
 
     function openAdd() {
@@ -149,6 +200,7 @@ export function ExpenseTransactionsPage() {
             txn_type: txn.txn_type as any,
             amount: Number(txn.amount),
             category: txn.category,
+            payment_mode: txn.payment_mode ?? null,
             description: txn.description ?? '',
             transacted_at: isoLocalDateTime(new Date(txn.transacted_at)),
             from_asset_id: txn.from_asset_id ?? null,
@@ -190,6 +242,7 @@ export function ExpenseTransactionsPage() {
                 ...form,
                 amount: Number(form.amount),
                 transacted_at: new Date(form.transacted_at).toISOString(),
+                payment_mode: form.payment_mode && String(form.payment_mode).trim().length > 0 ? String(form.payment_mode).trim() : null,
             }
 
             if (editingId != null) {
@@ -258,7 +311,15 @@ export function ExpenseTransactionsPage() {
                         className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
                     >
                         <IconDownload className="h-4 w-4" />
-                        <span className="hidden sm:inline">Download</span>
+                        <span className="hidden sm:inline">CSV</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void exportXlsx()}
+                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                    >
+                        <IconDownload className="h-4 w-4" />
+                        <span className="hidden sm:inline">Excel</span>
                     </button>
                     <button
                         type="button"
@@ -397,6 +458,22 @@ export function ExpenseTransactionsPage() {
                                 <option key={t} value={t} />
                             ))}
                         </datalist>
+                    </label>
+
+                    <label className="block">
+                        <div className="mb-1 text-xs text-zinc-400">Payment Mode</div>
+                        <select
+                            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                            value={form.payment_mode ?? ''}
+                            onChange={(e) => setForm((f) => ({ ...f, payment_mode: e.target.value ? e.target.value : null }))}
+                        >
+                            <option value="">—</option>
+                            {PAYMENT_MODES.map((m) => (
+                                <option key={m} value={m}>
+                                    {m}
+                                </option>
+                            ))}
+                        </select>
                     </label>
 
                     <label className="block">

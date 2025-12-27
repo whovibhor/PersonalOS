@@ -5,6 +5,8 @@ import { createFinanceRecurring, createFinanceTransaction, listFinanceAssets, li
 import type { FinanceAsset, FinanceCashflowPoint, FinanceCategorySpend, FinanceDashboard, FinanceOccurrence, FinanceGoal, FinanceRecurringCreate, FinanceTransactionCreate } from '../../lib/api'
 import { FINANCE_TAGS } from './financeTags'
 
+const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Net Banking', 'Bank Transfer', 'Cheque', 'Other'] as const
+
 import { Modal } from '../../components/Modal'
 
 function money(n: number) {
@@ -48,7 +50,8 @@ export function ExpenseDashboardPage() {
     const [txnForm, setTxnForm] = useState<FinanceTransactionCreate>(() => ({
         txn_type: 'expense',
         amount: 0,
-        category: 'General',
+        category: '',
+        payment_mode: null,
         description: '',
         transacted_at: new Date().toISOString(),
         from_asset_id: null,
@@ -133,6 +136,7 @@ export function ExpenseDashboardPage() {
             ...txnForm,
             amount: Number(txnForm.amount),
             transacted_at: new Date(txnForm.transacted_at).toISOString(),
+            payment_mode: txnForm.payment_mode && String(txnForm.payment_mode).trim().length > 0 ? String(txnForm.payment_mode).trim() : null,
         })
         setQuickAddOpen(false)
         await reloadCore()
@@ -212,11 +216,11 @@ export function ExpenseDashboardPage() {
             </section>
 
             <section className="grid gap-3 md:grid-cols-12">
-                <div className="md:col-span-8 rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
+                <div className="md:col-span-6 rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="text-sm font-semibold">Cash Flow</div>
-                            <div className="text-xs text-zinc-500">Last {cashflow.length || 6} months</div>
+                            <div className="text-xs text-zinc-500">From first transaction</div>
                         </div>
                     </div>
                     <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
@@ -234,7 +238,7 @@ export function ExpenseDashboardPage() {
                     </div>
                 </div>
 
-                <div className="md:col-span-4 space-y-3">
+                <div className="md:col-span-6 space-y-3">
                     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
                         <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-semibold">Upcoming Bills & EMIs</div>
@@ -350,6 +354,22 @@ export function ExpenseDashboardPage() {
                                 <option key={t} value={t} />
                             ))}
                         </datalist>
+                    </label>
+
+                    <label className="block">
+                        <div className="mb-1 text-xs text-zinc-400">Payment Mode</div>
+                        <select
+                            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                            value={txnForm.payment_mode ?? ''}
+                            onChange={(e) => setTxnForm((f) => ({ ...f, payment_mode: e.target.value ? e.target.value : null }))}
+                        >
+                            <option value="">—</option>
+                            {PAYMENT_MODES.map((m) => (
+                                <option key={m} value={m}>
+                                    {m}
+                                </option>
+                            ))}
+                        </select>
                     </label>
 
                     <label className="block">

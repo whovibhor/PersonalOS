@@ -83,6 +83,7 @@ def _txn_audit_dict(txn: FinanceTransaction) -> dict:
             "txn_type",
             "amount",
             "category",
+            "payment_mode",
             "description",
             "transacted_at",
             "from_asset_id",
@@ -397,6 +398,7 @@ def create_transaction(payload: FinanceTransactionCreate, db: Session = Depends(
         txn_type=payload.txn_type,
         amount=payload.amount,
         category=payload.category,
+        payment_mode=payload.payment_mode,
         description=payload.description,
         transacted_at=payload.transacted_at,
         from_asset_id=from_asset_id,
@@ -444,6 +446,7 @@ def update_transaction(txn_id: int, payload: FinanceTransactionUpdate, db: Sessi
     new_txn_type = data.get("txn_type", txn.txn_type)
     new_amount = data.get("amount", txn.amount)
     new_category = data.get("category", txn.category)
+    new_payment_mode = data.get("payment_mode", txn.payment_mode)
     new_description = data.get("description", txn.description)
     new_transacted_at = data.get("transacted_at", txn.transacted_at)
     new_from_asset_id = data.get("from_asset_id", txn.from_asset_id)
@@ -488,6 +491,7 @@ def update_transaction(txn_id: int, payload: FinanceTransactionUpdate, db: Sessi
     txn.txn_type = new_txn_type
     txn.amount = new_amount
     txn.category = new_category
+    txn.payment_mode = new_payment_mode
     txn.description = new_description
     txn.transacted_at = new_transacted_at
     txn.from_asset_id = new_from_asset_id

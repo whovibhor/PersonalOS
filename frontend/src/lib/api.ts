@@ -141,6 +141,7 @@ export type FinanceTransaction = {
     txn_type: FinanceTransactionType
     amount: number
     category: string
+    payment_mode: string | null
     description: string | null
     transacted_at: string
     from_asset_id: number | null
@@ -155,6 +156,7 @@ export type FinanceTransactionCreate = {
     txn_type: FinanceTransactionType
     amount: number
     category: string
+    payment_mode?: string | null
     description?: string | null
     transacted_at: string
     from_asset_id?: number | null
@@ -167,6 +169,7 @@ export type FinanceTransactionUpdate = {
     txn_type?: FinanceTransactionType
     amount?: number
     category?: string
+    payment_mode?: string | null
     description?: string | null
     transacted_at?: string
     from_asset_id?: number | null

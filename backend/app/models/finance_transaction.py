@@ -17,6 +17,7 @@ class FinanceTransaction(Base):
     txn_type: Mapped[str] = mapped_column(String(16), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False)
+    payment_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     transacted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

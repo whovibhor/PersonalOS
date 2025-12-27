@@ -96,6 +96,7 @@ class FinanceTransactionCreate(BaseModel):
     txn_type: TxnType
     amount: Decimal
     category: str
+    payment_mode: str | None = None
     description: str | None = None
 
     transacted_at: datetime
@@ -111,6 +112,7 @@ class FinanceTransactionUpdate(BaseModel):
     txn_type: TxnType | None = None
     amount: Decimal | None = None
     category: str | None = None
+    payment_mode: str | None = None
     description: str | None = None
 
     transacted_at: datetime | None = None
@@ -127,6 +129,7 @@ class FinanceTransactionOut(BaseModel):
     txn_type: str
     amount: Decimal
     category: str
+    payment_mode: str | None
     description: str | None
     transacted_at: datetime
     from_asset_id: int | None

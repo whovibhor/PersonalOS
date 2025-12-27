@@ -6,6 +6,13 @@ from .core.config import settings
 from .db.session import engine
 from .models import Base
 from .models import expense as _expense_model  # ensure model is registered
+from .models import finance_asset as _finance_asset_model  # ensure model is registered
+from .models import finance_budget as _finance_budget_model  # ensure model is registered
+from .models import finance_goal as _finance_goal_model  # ensure model is registered
+from .models import finance_liability as _finance_liability_model  # ensure model is registered
+from .models import finance_recurring as _finance_recurring_model  # ensure model is registered
+from .models import finance_transaction as _finance_transaction_model  # ensure model is registered
+from .models import finance_audit_log as _finance_audit_log_model  # ensure model is registered
 from .models import habit as _habit_model  # ensure model is registered
 from .models import task as _task_model  # ensure model is registered
 from .models import task_history as _task_history_model  # ensure model is registered

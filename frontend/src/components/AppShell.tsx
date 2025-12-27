@@ -1,6 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
-function NavItem({ to, label }: { to: string; label: string }) {
+function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
     return (
         <NavLink
             to={to}
@@ -10,14 +10,14 @@ function NavItem({ to, label }: { to: string; label: string }) {
                     : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50'
                 }`
             }
-            end
+            end={end}
         >
             {label}
         </NavLink>
     )
 }
 
-function HeaderNavItem({ to, label }: { to: string; label: string }) {
+function HeaderNavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
     return (
         <NavLink
             to={to}
@@ -27,7 +27,7 @@ function HeaderNavItem({ to, label }: { to: string; label: string }) {
                     : 'text-zinc-200 hover:bg-zinc-900 hover:text-zinc-50'
                 }`
             }
-            end
+            end={end}
         >
             {label}
         </NavLink>
@@ -39,6 +39,9 @@ type AppShellProps = {
 }
 
 export function AppShell({ variant }: AppShellProps) {
+    const location = useLocation()
+    const inExpenseModule = location.pathname === '/expense' || location.pathname.startsWith('/expense/')
+
     return (
         <div className="flex min-h-dvh flex-col bg-zinc-950 text-zinc-50">
             <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
@@ -72,12 +75,12 @@ export function AppShell({ variant }: AppShellProps) {
                         ) : (
                             <div className="rounded-full border border-zinc-800 bg-zinc-900/20 p-1">
                                 <div className="flex items-center gap-1">
-                                    <HeaderNavItem to="/" label="Dashboard" />
-                                    <HeaderNavItem to="/todo" label="To‑Do" />
-                                    <HeaderNavItem to="/habits" label="Habits" />
-                                    <HeaderNavItem to="/notes" label="Notes" />
-                                    <HeaderNavItem to="/expenses" label="Expenses" />
-                                    <HeaderNavItem to="/analytics" label="Analytics" />
+                                    <HeaderNavItem to="/" label="Dashboard" end />
+                                    <HeaderNavItem to="/todo" label="To‑Do" end />
+                                    <HeaderNavItem to="/habits" label="Habits" end />
+                                    <HeaderNavItem to="/notes" label="Notes" end />
+                                    <HeaderNavItem to="/expense" label="Net Worth" end />
+                                    <HeaderNavItem to="/analytics" label="Analytics" end />
                                 </div>
                             </div>
                         )}
@@ -93,9 +96,25 @@ export function AppShell({ variant }: AppShellProps) {
                             <NavItem to="/todo" label="To‑Do" />
                             <NavItem to="/habits" label="Habits" />
                             <NavItem to="/notes" label="Notes" />
-                            <NavItem to="/expenses" label="Expense tracker" />
+                            <NavItem to="/expense" label="Net Worth" />
                             <NavItem to="/analytics" label="Analytics" />
                         </div>
+                        <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/10 px-3 py-3 text-xs text-zinc-500">
+                            Single-user mode
+                        </div>
+                    </aside>
+                ) : variant === 'page' && inExpenseModule ? (
+                    <aside className="hidden w-64 shrink-0 md:block">
+                        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
+                            <div className="px-3 pb-2 text-xs font-semibold tracking-wide text-zinc-400">NET WORTH</div>
+                            <NavItem to="/expense" label="Dashboard" end />
+                            <NavItem to="/expense/transactions" label="Transactions" end />
+                            <NavItem to="/expense/assets" label="Assets & Debts" end />
+                            <NavItem to="/expense/budget" label="Budget" end />
+                            <NavItem to="/expense/goals" label="Goals" end />
+                            <NavItem to="/expense/reports" label="Reports" end />
+                        </div>
+
                         <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/10 px-3 py-3 text-xs text-zinc-500">
                             Single-user mode
                         </div>

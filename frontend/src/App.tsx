@@ -4,10 +4,15 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { ExpensesPage } from './pages/ExpensesPage'
 import { HabitsPage } from './pages/HabitsPage'
 import { NotesPage } from './pages/NotesPage'
 import { TodoPage } from './pages/TodoPage'
+import { ExpenseAssetsPage } from './pages/expense/ExpenseAssetsPage'
+import { ExpenseBudgetPage } from './pages/expense/ExpenseBudgetPage'
+import { ExpenseDashboardPage } from './pages/expense/ExpenseDashboardPage'
+import { ExpenseGoalsPage } from './pages/expense/ExpenseGoalsPage'
+import { ExpenseReportsPage } from './pages/expense/ExpenseReportsPage'
+import { ExpenseTransactionsPage } from './pages/expense/ExpenseTransactionsPage'
 
 function App() {
   const [taskMutationTick, setTaskMutationTick] = useState(0)
@@ -33,8 +38,14 @@ function App() {
           />
           <Route path="/habits" element={<HabitsPage />} />
           <Route path="/notes" element={<NotesPage />} />
-          <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+
+          <Route path="/expense" element={<ExpenseDashboardPage />} />
+          <Route path="/expense/transactions" element={<ExpenseTransactionsPage />} />
+          <Route path="/expense/assets" element={<ExpenseAssetsPage />} />
+          <Route path="/expense/budget" element={<ExpenseBudgetPage />} />
+          <Route path="/expense/goals" element={<ExpenseGoalsPage />} />
+          <Route path="/expense/reports" element={<ExpenseReportsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

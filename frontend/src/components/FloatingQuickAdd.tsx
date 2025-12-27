@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { Modal } from './Modal'
-import { ExpenseQuickAdd } from './ExpenseQuickAdd.tsx'
 import { HabitQuickAdd } from './HabitQuickAdd.tsx'
 import { TaskQuickAdd } from './TaskQuickAdd'
 
-type Feature = 'task' | 'habit' | 'expense'
+type Feature = 'task' | 'habit'
 
 type FloatingQuickAddProps = {
     onTaskCreated: () => void
@@ -19,7 +18,7 @@ export function FloatingQuickAdd({ onTaskCreated }: FloatingQuickAddProps) {
         if (!feature) return 'Quick add'
         if (feature === 'task') return 'Quick add: Task'
         if (feature === 'habit') return 'Quick add: Habit'
-        return 'Quick add: Expense'
+        return 'Quick add'
     }, [feature])
 
     const close = useCallback(() => {
@@ -62,13 +61,6 @@ export function FloatingQuickAdd({ onTaskCreated }: FloatingQuickAddProps) {
                         >
                             Habit
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => setFeature('expense')}
-                            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm transition hover:bg-zinc-800"
-                        >
-                            Expense
-                        </button>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -91,14 +83,6 @@ export function FloatingQuickAdd({ onTaskCreated }: FloatingQuickAddProps) {
 
                         {feature === 'habit' ? (
                             <HabitQuickAdd
-                                onCreated={() => {
-                                    close()
-                                }}
-                            />
-                        ) : null}
-
-                        {feature === 'expense' ? (
-                            <ExpenseQuickAdd
                                 onCreated={() => {
                                     close()
                                 }}

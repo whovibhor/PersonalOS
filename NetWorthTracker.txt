@@ -1,0 +1,76 @@
+Finalized Features & Logic
+1. Assets Management
+
+Liquid Assets: Cash, Bank Accounts (these change with every transaction)
+Investments: Stocks, Mutual Funds, FDs, Crypto
+Physical Assets: Property, Vehicle, Jewelry, Electronics
+Auto-update: When you add income/expense, your primary bank/cash asset automatically adjusts
+
+2. Liabilities Management
+
+Credit Cards (balance, limit, due date, minimum payment)
+Loans (EMI amount, remaining principal, interest rate, tenure left)
+Other debts
+Auto-update: When you pay EMI/bill, both cash and liability decrease
+
+3. Transaction System
+
+Income: Adds to your selected asset (usually bank account)
+Expense: Deducts from your selected asset
+Transfer: Move money between assets (doesn't affect net worth)
+Each transaction specifies: amount, category, date, from/to which account
+
+4. Recurring Transactions (Auto-tracking)
+
+Income: Salary (monthly), freelance payments, rental income
+Expenses: Rent, EMIs, subscriptions, bills, insurance
+Auto-create: System prompts/auto-adds these on schedule
+Due reminders: Shows upcoming bills/EMIs on dashboard
+
+5. Budget Management
+
+Set monthly limits per category (Food: ₹10k, Transport: ₹5k, etc.)
+Track spending vs budget in real-time
+Alerts when approaching/exceeding limits
+Rollover unused budget option
+
+6. Goal Tracking
+
+Set savings goals (Emergency fund: ₹5L, House: ₹20L, Vacation: ₹2L)
+Track progress automatically based on net worth growth
+Calculate: "Save ₹X/month to reach goal by deadline"
+Option to allocate specific assets to specific goals
+
+7. Bills & EMI Tracker
+
+All recurring expenses with due dates
+Payment status (paid/pending)
+Auto-mark as paid when transaction added
+Upcoming dues calendar view
+
+8. Dashboard Analytics
+
+Net Worth: Real-time calculation
+Cash Flow: Monthly income - expenses = savings
+Savings Rate: (Savings / Income) × 100
+Expense Breakdown: Pie chart by category
+Net Worth Trend: Graph over time
+Budget Health: Category-wise spending vs budget
+Debt-to-Asset Ratio: Total liabilities / Total assets
+
+9. Reports & Insights
+
+Monthly/yearly financial summary
+Spending trends (which categories increasing/decreasing)
+Income growth tracking
+Best/worst spending months
+Category comparison across months
+
+10. Smart Features
+
+Primary Account: Designate one bank account where salary comes and expenses go (auto-adjusts with transactions)
+Transaction Categories: Pre-defined + custom categories
+Search & Filter: Find any transaction by date, amount, category, keyword
+Export Data: Download as CSV/PDF
+Data Backup: Auto-save to browser storage
+

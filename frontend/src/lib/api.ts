@@ -62,11 +62,20 @@ export type Habit = {
     frequency: string
     created_at: string
     updated_at: string
+    done_today: boolean
+    current_streak: number
+    longest_streak: number
+    total_done: number
 }
 
 export type HabitCreate = {
     name: string
     frequency: string
+}
+
+export type HabitUpdate = {
+    name?: string
+    frequency?: string
 }
 
 // --- Net Worth (Finance) module types ---
@@ -331,6 +340,116 @@ export type FinanceCashflowPoint = {
     savings: number
 }
 
+// --- Dashboard / Today State ---
+
+export type DashTaskItem = {
+    id: number
+    title: string
+    priority: number
+    status: string
+    due_date: string | null
+}
+
+export type DashHabitItem = {
+    id: number
+    name: string
+    frequency: string
+    done_today: boolean
+    current_streak: number
+}
+
+export type DashBillItem = {
+    id: number
+    name: string
+    amount: number
+    due_date: string
+    days_until: number
+}
+
+export type DashDailyLog = {
+    id: number
+    mood: number | null
+    energy: number | null
+    focus: number | null
+    score: number | null
+}
+
+export type DashSleepLog = {
+    id: number
+    hours_slept: number | null
+    quality: number | null
+    wake_time: string | null
+    sleep_date: string
+}
+
+export type DashFinance = {
+    net_worth: number
+    expenses_this_month: number
+    income_this_month: number
+    budget_total: number | null
+    budget_used_pct: number | null
+}
+
+export type DashAttendance = {
+    id: number
+    status: 'present' | 'absent'
+    reason: string | null
+}
+
+export type TodayState = {
+    date: string
+    tasks_pending: number
+    tasks_overdue: number
+    tasks: DashTaskItem[]
+    habits_done: number
+    habits_total: number
+    habits: DashHabitItem[]
+    bills_due: DashBillItem[]
+    daily_log: DashDailyLog | null
+    last_sleep: DashSleepLog | null
+    finance: DashFinance
+    attendance: DashAttendance | null
+}
+
+export async function getTodayState() {
+    return api<TodayState>('/api/dashboard/today')
+}
+
+// --- Attendance API ---
+
+export type AttendanceStatus = 'present' | 'absent'
+
+export type Attendance = {
+    id: number
+    attend_date: string
+    status: AttendanceStatus
+    reason: string | null
+    created_at: string
+    updated_at: string
+}
+
+export type AttendanceCreate = {
+    attend_date?: string
+    status: AttendanceStatus
+    reason?: string | null
+}
+
+export async function listAttendance(limit = 60) {
+    return api<Attendance[]>(`/api/attendance?limit=${limit}`)
+}
+
+export async function getTodayAttendance() {
+    return api<Attendance | null>('/api/attendance/today')
+}
+
+export async function saveAttendance(payload: AttendanceCreate) {
+    return api<Attendance>('/api/attendance', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateAttendance(id: number, payload: { status?: AttendanceStatus; reason?: string | null }) {
+    return api<Attendance>(`/api/attendance/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
 function getApiBaseUrl() {
     const fromEnv = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
     return fromEnv.trim().length > 0 ? fromEnv : ''
@@ -396,6 +515,150 @@ export async function listHabits() {
 
 export async function createHabit(payload: HabitCreate) {
     return api<Habit>('/api/habits', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateHabit(habitId: number, payload: HabitUpdate) {
+    return api<Habit>(`/api/habits/${habitId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function deleteHabit(habitId: number) {
+    return api<void>(`/api/habits/${habitId}`, { method: 'DELETE' })
+}
+
+export async function checkinHabit(habitId: number) {
+    return api<Habit>(`/api/habits/${habitId}/checkin`, { method: 'POST' })
+}
+
+// --- Notes API ---
+
+export type Note = {
+    id: number
+    title: string
+    content: string
+    tags: string[]
+    created_at: string
+    updated_at: string
+}
+
+export type NoteCreate = {
+    title?: string
+    content?: string
+    tags?: string[]
+}
+
+export type NoteUpdate = {
+    title?: string
+    content?: string
+    tags?: string[]
+}
+
+export async function listNotes(q?: string, tag?: string) {
+    const qs = new URLSearchParams()
+    if (q) qs.set('q', q)
+    if (tag) qs.set('tag', tag)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return api<Note[]>(`/api/notes${suffix}`)
+}
+
+export async function createNote(payload: NoteCreate) {
+    return api<Note>('/api/notes', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateNote(noteId: number, payload: NoteUpdate) {
+    return api<Note>(`/api/notes/${noteId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function deleteNote(noteId: number) {
+    return api<void>(`/api/notes/${noteId}`, { method: 'DELETE' })
+}
+
+// --- Daily Log API ---
+
+export type DailyLog = {
+    id: number
+    log_date: string
+    mood: number | null
+    energy: number | null
+    focus: number | null
+    reflection: string | null
+    score: number | null
+    created_at: string
+    updated_at: string
+}
+
+export type DailyLogCreate = {
+    log_date?: string
+    mood?: number | null
+    energy?: number | null
+    focus?: number | null
+    reflection?: string | null
+}
+
+export type DailyLogUpdate = {
+    mood?: number | null
+    energy?: number | null
+    focus?: number | null
+    reflection?: string | null
+}
+
+export async function listDailyLogs(limit = 30) {
+    return api<DailyLog[]>(`/api/daily-log?limit=${limit}`)
+}
+
+export async function getTodayDailyLog() {
+    return api<DailyLog | null>('/api/daily-log/today')
+}
+
+export async function saveDailyLog(payload: DailyLogCreate) {
+    return api<DailyLog>('/api/daily-log', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateDailyLog(logId: number, payload: DailyLogUpdate) {
+    return api<DailyLog>(`/api/daily-log/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+// --- Sleep Log API ---
+
+export type SleepLog = {
+    id: number
+    sleep_date: string
+    hours_slept: number | null
+    quality: number | null
+    wake_time: string | null
+    notes: string | null
+    created_at: string
+    updated_at: string
+}
+
+export type SleepLogCreate = {
+    sleep_date?: string
+    hours_slept?: number | null
+    quality?: number | null
+    wake_time?: string | null
+    notes?: string | null
+}
+
+export type SleepLogUpdate = {
+    hours_slept?: number | null
+    quality?: number | null
+    wake_time?: string | null
+    notes?: string | null
+}
+
+export async function listSleepLogs(limit = 30) {
+    return api<SleepLog[]>(`/api/sleep?limit=${limit}`)
+}
+
+export async function getTodaySleepLog() {
+    return api<SleepLog | null>('/api/sleep/today')
+}
+
+export async function saveSleepLog(payload: SleepLogCreate) {
+    return api<SleepLog>('/api/sleep', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateSleepLog(logId: number, payload: SleepLogUpdate) {
+    return api<SleepLog>(`/api/sleep/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
 
 // --- Finance (Net Worth) API ---

@@ -52,24 +52,11 @@ export function AppShell({ variant }: AppShellProps) {
                         {variant === 'dashboard' ? (
                             <div className="rounded-full border border-zinc-800 bg-zinc-900/20 p-1">
                                 <div className="flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        className="rounded-full px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900 hover:text-zinc-50"
-                                    >
-                                        About
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="rounded-full px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900 hover:text-zinc-50"
-                                    >
-                                        Premium
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="rounded-full bg-zinc-800 px-3 py-2 text-sm text-zinc-50 transition hover:bg-zinc-700"
-                                    >
-                                        Login
-                                    </button>
+                                    <HeaderNavItem to="/todo" label="To‑Do" end />
+                                    <HeaderNavItem to="/habits" label="Daily" end />
+                                    <HeaderNavItem to="/notes" label="Notes" end />
+                                    <HeaderNavItem to="/expense" label="Net Worth" end />
+                                    <HeaderNavItem to="/analytics" label="Analytics" end />
                                 </div>
                             </div>
                         ) : (
@@ -77,7 +64,7 @@ export function AppShell({ variant }: AppShellProps) {
                                 <div className="flex items-center gap-1">
                                     <HeaderNavItem to="/" label="Dashboard" end />
                                     <HeaderNavItem to="/todo" label="To‑Do" end />
-                                    <HeaderNavItem to="/habits" label="Habits" end />
+                                    <HeaderNavItem to="/habits" label="Daily" end />
                                     <HeaderNavItem to="/notes" label="Notes" end />
                                     <HeaderNavItem to="/expense" label="Net Worth" end />
                                     <HeaderNavItem to="/analytics" label="Analytics" end />
@@ -90,20 +77,23 @@ export function AppShell({ variant }: AppShellProps) {
 
             <div className="mx-auto flex w-full max-w-screen-2xl flex-1 gap-4 px-4 pb-6 pt-4 sm:px-6 sm:pt-6 min-h-0">
                 {variant === 'dashboard' ? (
-                    <aside className="hidden w-64 shrink-0 md:block">
+                    <aside className="hidden w-56 shrink-0 md:block">
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
-                            <NavItem to="/" label="Dashboard" />
+                            <NavItem to="/" label="Dashboard" end />
+                            <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">PRODUCTIVITY</div>
                             <NavItem to="/todo" label="To‑Do" />
-                            <NavItem to="/habits" label="Habits" />
                             <NavItem to="/notes" label="Notes" />
-                            <NavItem to="/expense" label="Net Worth" />
                             <NavItem to="/analytics" label="Analytics" />
+                            <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">DAILY LIFE</div>
+                            <NavItem to="/habits" label="Daily Canvas" />
+                            <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">FINANCE</div>
+                            <NavItem to="/expense" label="Net Worth" />
                         </div>
                     </aside>
                 ) : variant === 'page' && inExpenseModule ? (
-                    <aside className="hidden w-64 shrink-0 md:block">
+                    <aside className="hidden w-56 shrink-0 md:block">
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
-                            <div className="px-3 pb-2 text-xs font-semibold tracking-wide text-zinc-400">NET WORTH</div>
+                            <div className="px-3 pb-2 text-xs font-semibold tracking-widest text-zinc-600">NET WORTH</div>
                             <NavItem to="/expense" label="Dashboard" end />
                             <NavItem to="/expense/transactions" label="Transactions" end />
                             <NavItem to="/expense/bills" label="Bills" end />

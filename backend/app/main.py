@@ -16,7 +16,12 @@ from .models import finance_liability as _finance_liability_model  # ensure mode
 from .models import finance_recurring as _finance_recurring_model  # ensure model is registered
 from .models import finance_transaction as _finance_transaction_model  # ensure model is registered
 from .models import finance_audit_log as _finance_audit_log_model  # ensure model is registered
+from .models import attendance as _attendance_model  # ensure model is registered
+from .models import daily_log as _daily_log_model  # ensure model is registered
 from .models import habit as _habit_model  # ensure model is registered
+from .models import habit_log as _habit_log_model  # ensure model is registered
+from .models import note as _note_model  # ensure model is registered
+from .models import sleep_log as _sleep_log_model  # ensure model is registered
 from .models import task as _task_model  # ensure model is registered
 from .models import task_history as _task_history_model  # ensure model is registered
 

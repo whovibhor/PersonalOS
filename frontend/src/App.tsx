@@ -3,9 +3,11 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import { AppShell } from './components/AppShell'
 import { AnalyticsPage } from './pages/AnalyticsPage'
+import { DailyLogPage } from './pages/DailyLogPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { HabitsPage } from './pages/HabitsPage'
 import { NotesPage } from './pages/NotesPage'
+import { SleepPage } from './pages/SleepPage'
 import { TodoPage } from './pages/TodoPage'
 import { ExpenseAssetsPage } from './pages/expense/ExpenseAssetsPage'
 import { ExpenseBillsPage } from './pages/expense/ExpenseBillsPage'
@@ -40,6 +42,8 @@ function App() {
           />
           <Route path="/habits" element={<HabitsPage />} />
           <Route path="/notes" element={<NotesPage />} />
+          <Route path="/daily-log" element={<DailyLogPage />} />
+          <Route path="/sleep" element={<SleepPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
 
           <Route path="/expense" element={<ExpenseDashboardPage />} />

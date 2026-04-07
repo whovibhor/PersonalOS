@@ -1,0 +1,540 @@
+# PersonalOS - Till Now Summary
+Date: 2026-04-07
+Scope: Deep implementation review of backend, frontend, data model, user flows, and security posture.
+
+## 1) Executive Snapshot
+PersonalOS is currently a single-user local-first productivity + personal finance system.
+
+What is strongly implemented now:
+- Task management with rich fields, recurrence support, and history logging.
+- Finance/Net Worth module with assets, liabilities, transactions, recurring bills, budgets, goals, dashboard analytics, and audit history.
+- Frontend coverage for most finance flows, plus export from transactions/reports.
+
+What is partially implemented:
+- Habits (create/list only).
+- Analytics page (task analytics only).
+- Notes (localStorage only, no backend).
+
+What is planned conceptually but not shipped:
+- Sleep tracker, attendance, life calendar, achievement engine, full journaling/media flows (present in planning docs, not implemented in code).
+
+Readiness summary:
+- Good local MVP for a personal user.
+- Not production-ready for multi-user or internet exposure due to no authentication/authorization and no tenant isolation.
+
+---
+
+## 2) Architecture and Technical Shape
+
+### Backend
+- Framework: FastAPI.
+- ORM: SQLAlchemy.
+- DB target: MySQL (PyMySQL).
+- App entry: backend/app/main.py.
+- Startup behavior:
+  - Base.metadata.create_all() on startup.
+  - best-effort additive schema check for finance_transactions.payment_mode.
+- API prefix: /api.
+- Mounted routers: tasks, habits, finance (/expense), task-history, health.
+- CORS:
+  - allowed origins: frontend_origin env + localhost/127.0.0.1:5173.
+  - allow_credentials=True.
+  - allow_methods=["*"] and allow_headers=["*"].
+
+### Frontend
+- Framework: React 19 + Vite + TypeScript + Tailwind.
+- Router: BrowserRouter in App.tsx.
+- API client: frontend/src/lib/api.ts.
+- Dev proxy:
+  - /api -> http://127.0.0.1:8000 in vite.config.ts.
+
+### Product mode
+- README explicitly states single-user mode (no auth).
+
+---
+
+## 3) Implemented Features (Current State)
+
+### A) Task Module
+Backend capabilities:
+- Create task with title, description, category, labels, assignee, recurrence, start_date, due_date, priority.
+- List tasks:
+  - view=all
+  - view=today with logic for overdue, no-due, active daily recurrence, and ongoing date-range tasks.
+- Update task fields and completion status.
+- Delete task.
+- Status derivation:
+  - done / overdue / todo.
+  - daily recurrence uses recurrence_completed_on (done today logic).
+- Task audit trail in task_history for created/updated/deleted/completed/uncompleted.
+
+Frontend capabilities (Todo page):
+- Multi-view task management:
+  - date scope: Today, This Week, Next 30 Days, All Time.
+  - view mode: List, Calendar, Board.
+- Rich filtering:
+  - status, category, priority, labels, search query.
+- Rich create/edit:
+  - assignee picker, recurrence, labels add/remove, start/due date, category chips.
+- Panels:
+  - Today, Ongoing, Upcoming deadlines, Completed tasks.
+- Task detail modal.
+- History modal (reads task_history).
+- Local persistence for filter selections in localStorage.
+
+### B) Habit Module
+Backend:
+- list habits.
+- create habit (name + frequency string).
+
+Frontend:
+- Habit list page.
+- Add habit modal.
+
+Not implemented yet:
+- habit completion logs/streaks/analytics/reminders.
+
+### C) Notes Module
+- Frontend-only localStorage notes.
+- Add/delete notes.
+- No backend sync, no cross-device persistence.
+
+### D) Analytics Module (non-finance page)
+- Task-only analytics:
+  - total, completed, pending, overdue, due today, due in 7 days, no due date.
+  - priority mix.
+  - completed-before-due best effort metric.
+
+### E) Finance / Net Worth Module
+
+#### Assets and Liabilities
+- Asset CRUD (list/create/update), primary asset control.
+- Liability CRUD (list/create/update).
+- Net worth displayed from total_assets - total_liabilities.
+
+#### Transactions
+- Transaction CRUD types:
+  - income
+  - expense
+  - transfer
+  - liability_payment
+- Balance effects auto-applied and reversed on update/delete.
+- Supports optional payment_mode.
+- Filters on backend for start_date/end_date/txn_type/category.
+- Frontend transaction page:
+  - tab filters (All/Income/Expense/Transfer)
+  - search
+  - add/edit/delete
+  - CSV export
+  - Excel-friendly .xls export
+
+#### Recurring Rules and Occurrences (Bills)
+- Recurring rule CRUD (daily/weekly/monthly).
+- Initial pending occurrence generated at rule creation.
+- Post occurrence creates real transaction, marks occurrence posted, rolls next due, creates next pending occurrence.
+- list occurrences with rule-enriched fields.
+
+#### Budgets
+- Monthly budget upsert by year/month.
+- Category budget upsert by year/month/category.
+- Budget page compares spend vs limits and shows progress bars.
+
+#### Goals
+- Goal CRUD with target/current amounts, optional category/date, active flag.
+- Goal allocation endpoints exist in backend.
+- Frontend goals page supports:
+  - create
+  - edit
+  - delete
+  - quick add progress (+1k, +5k, custom)
+
+#### Finance Dashboard and Reports
+- Dashboard endpoint returns:
+  - net worth
+  - total assets/liabilities
+  - month income/expenses/savings
+  - savings rate
+- category-spend endpoint for month.
+- cashflow endpoint monthly rollup from first transaction month or last_n_months window.
+- Frontend expense dashboard includes:
+  - headline net worth
+  - KPI cards
+  - cashflow list
+  - upcoming occurrences
+  - goals progress cards
+  - category spend snapshot
+  - quick add transaction modal
+  - quick add bill modal
+- Expense reports page includes:
+  - range selector
+  - averages, debt-to-asset, estimated net-worth growth from savings
+  - cashflow and spend summaries
+  - JSON export
+
+#### Audit History
+- backend finance_audit_log tracks many finance entity changes (before_json/after_json).
+- frontend ExpenseHistoryPage lists and displays diffs in expandable details.
+
+---
+
+## 4) API Surface (as currently reachable)
+
+### Mounted and reachable endpoints (38)
+1. GET /api/health
+
+Tasks:
+2. GET /api/tasks
+3. GET /api/tasks/{task_id}
+4. POST /api/tasks
+5. PATCH /api/tasks/{task_id}
+6. DELETE /api/tasks/{task_id}
+
+Task History:
+7. GET /api/task-history
+
+Habits:
+8. GET /api/habits
+9. POST /api/habits
+
+Finance assets:
+10. GET /api/expense/assets
+11. POST /api/expense/assets
+12. PATCH /api/expense/assets/{asset_id}
+
+Finance liabilities:
+13. GET /api/expense/liabilities
+14. POST /api/expense/liabilities
+15. PATCH /api/expense/liabilities/{liability_id}
+
+Finance transactions:
+16. GET /api/expense/transactions
+17. POST /api/expense/transactions
+18. PATCH /api/expense/transactions/{txn_id}
+19. DELETE /api/expense/transactions/{txn_id}
+
+Recurring and occurrences:
+20. GET /api/expense/recurring
+21. POST /api/expense/recurring
+22. PATCH /api/expense/recurring/{rule_id}
+23. GET /api/expense/occurrences
+24. POST /api/expense/occurrences/{occurrence_id}/post
+
+Budgets:
+25. GET /api/expense/budgets/monthly
+26. POST /api/expense/budgets/monthly
+27. GET /api/expense/budgets/category
+28. POST /api/expense/budgets/category
+
+Goals:
+29. GET /api/expense/goals
+30. POST /api/expense/goals
+31. PATCH /api/expense/goals/{goal_id}
+32. DELETE /api/expense/goals/{goal_id}
+33. GET /api/expense/goal-allocations
+34. POST /api/expense/goal-allocations
+
+Finance history and analytics:
+35. GET /api/expense/history
+36. GET /api/expense/dashboard
+37. GET /api/expense/analytics/category-spend
+38. GET /api/expense/analytics/cashflow
+
+### Coded but currently NOT mounted
+- GET /expenses and POST /expenses exist in backend/app/api/expenses.py but expenses router is not included in backend/app/api/router.py.
+- Practical impact: legacy simple expense API is dead code unless router inclusion is added.
+
+---
+
+## 5) Frontend Routes and User Flow Map
+
+### Main routes
+- /
+- /todo
+- /habits
+- /notes
+- /analytics
+- /expense
+- /expense/transactions
+- /expense/bills
+- /expense/assets
+- /expense/budget
+- /expense/goals
+- /expense/reports
+- /expense/history
+
+### User flow details
+
+#### 5.1 Startup flow
+1. Frontend loads AppShell and route.
+2. API calls through /api proxy (or VITE_API_BASE_URL override).
+3. Backend starts, creates tables if needed.
+
+#### 5.2 Task workflow
+1. User opens /todo.
+2. App loads all tasks.
+3. User can:
+   - create task via modal
+   - edit inline card
+   - mark complete/uncomplete
+   - delete
+   - open details
+   - open history timeline
+4. User can switch date scopes and view modes for planning (list/calendar/board).
+5. Filter states persist in browser localStorage.
+
+#### 5.3 Habit workflow
+1. User opens /habits.
+2. List existing habits.
+3. Add new habit (name + frequency).
+4. No check-in flow yet.
+
+#### 5.4 Notes workflow
+1. User opens /notes.
+2. Notes loaded from localStorage key personalos.notes.v1.
+3. Add and delete notes locally.
+4. No backend backup/sync.
+
+#### 5.5 Finance onboarding-like flow
+1. User adds initial assets and liabilities in /expense/assets.
+2. User records transactions in /expense/transactions.
+3. Dashboard /expense reflects net worth and cashflow changes.
+4. User configures recurring bills in /expense/bills.
+5. User posts occurrences when due to create transactions.
+6. User sets monthly and category budgets in /expense/budget.
+7. User creates goals and updates progress in /expense/goals.
+8. User reviews reports and history in /expense/reports and /expense/history.
+
+#### 5.6 Finance quick flows from dashboard
+- Quick Add transaction modal allows rapid entry.
+- Add Bill modal creates recurring rules.
+- Links drive user to deep pages for full management.
+
+---
+
+## 6) Database Model and Migration Details
+
+## 6.1 SQLAlchemy models present
+- tasks
+- task_history
+- habits
+- expenses
+- finance_assets
+- finance_liabilities
+- finance_transactions
+- finance_recurring_rules
+- finance_recurring_occurrences
+- finance_monthly_budgets
+- finance_category_budgets
+- finance_goals
+- finance_goal_allocations
+- finance_audit_log
+
+### 6.2 Key field-level notes
+- tasks:
+  - recurrence and recurrence_completed_on support recurring completion semantics.
+  - labels stored as JSON string in Text column.
+- finance amounts generally Numeric(14,2).
+- finance_transactions includes payment_mode nullable string.
+- audit/history tables store before/after or changes JSON strings.
+
+### 6.3 Relationship and integrity reality
+Important implementation split:
+- SQLAlchemy models mostly use plain Integer ids and do not declare ForeignKey constraints.
+- Migration scripts create_finance_networth_tables.py add real FK constraints and indexes.
+
+Consequence:
+- If DB is built via Base.metadata.create_all only, constraints/indexes/uniques from migration SQL may be missing.
+- If migration scripts were run against DB, constraints may exist.
+- This can produce environment drift and inconsistent behavior/performance.
+
+### 6.4 Migration/state observations
+- payment_mode support exists in model + startup additive migration + dedicated migration script.
+- old tasks migration/scripts still reference estimated_minutes, but current Task model removed it.
+- stale scripts/tests referencing estimated_minutes are now inconsistent with live schema.
+
+---
+
+## 7) Security Audit (Deep)
+
+## 7.1 Security controls already present
+- Typed request validation via Pydantic models.
+- ORM query construction (reduces SQL injection risk).
+- CORS origin allow-list for local dev hosts.
+- Finance and task change auditing (history tables).
+
+## 7.2 Findings by severity
+
+### Critical
+1. No authentication.
+- No login/session/JWT checks.
+- Any caller with network/API access can mutate all data.
+
+2. No authorization or tenant isolation.
+- No user_id columns on core tables.
+- Impossible to isolate data by user.
+- Multi-user deployment would expose data across users.
+
+### High
+3. No rate limiting/throttling.
+- Vulnerable to request flooding or accidental heavy usage.
+
+4. Large list endpoints mostly unbounded.
+- Several list APIs return entire datasets (transactions, recurring rules, etc.) without pagination.
+- Can degrade performance and increase DoS surface as data grows.
+
+5. Finance logic depends on app-level validation only.
+- In environments lacking DB-level FKs/uniques (create_all-only path), integrity and consistency risks increase.
+
+### Medium
+6. CORS methods and headers are wildcarded.
+- allow_methods=["*"] and allow_headers=["*"] are permissive for non-dev setups.
+
+7. Validation gaps in finance schemas.
+- No strict positive constraint on several Decimal amount inputs.
+- day_of_month/day_of_week ranges are not enforced by schema.
+- Year/month ranges are not constrained in budget schemas.
+
+8. Verbose error detail exposure.
+- Business-rule details are returned directly in 400 responses (helpful for UX, but leaks behavior details).
+
+9. Dependency supply-chain posture is weak.
+- backend requirements.txt is unpinned (no exact versions/lock).
+
+10. Audit reliability is best-effort, not atomic with business write.
+- _audit uses separate commit after domain commit; audit may fail while data write succeeds.
+
+### Low
+11. Transport security and environment hardening are not production-hardened.
+- HTTP dev defaults.
+- No explicit TLS termination/setup in repo.
+
+12. Duplicate constant definitions (payment modes) and stale scripts increase maintenance risk.
+
+## 7.3 Injection/XSS review notes
+- No dangerouslySetInnerHTML usage found in frontend review.
+- React default escaping helps mitigate reflected/stored HTML injection in current rendering paths.
+- SQL injection risk appears low in runtime API handlers due to ORM usage.
+- Raw SQL usage exists primarily in migration/startup schema operations (static SQL, not user-formatted query strings).
+
+## 7.4 Immediate security hardening actions
+Priority order:
+1. Add auth + user identity model.
+2. Add user_id to all domain tables and enforce per-user query scoping.
+3. Add pagination and sensible default limits on all list endpoints.
+4. Add rate limiting middleware.
+5. Tighten CORS methods/headers to explicit lists.
+6. Add strict validation for amounts and recurrence day fields.
+7. Make audit writes transactional with business writes or add robust fallback/monitoring.
+8. Pin dependencies and add vulnerability scan in CI.
+
+---
+
+## 8) Quality, Testing, and Operations
+
+### Current test state
+- No formal automated unit/integration suite running under pytest in this repo state.
+- Existing ad-hoc scripts:
+  - backend/test_api_create.py
+  - backend/test_create_task.py
+  - backend/test_update_task.py
+  - backend/check_tasks.py
+  - backend/check_finance_networth.py
+
+### Test quality issues
+- Several scripts reference estimated_minutes, which is no longer in current Task model/schema.
+- These scripts are stale and may fail, reducing confidence.
+
+### Build/lint status
+- Current static/type checks report no active editor errors at review time.
+
+---
+
+## 9) Notable Implementation Gaps and Inconsistencies
+
+1. Legacy expenses API is unreachable.
+- expenses router not mounted.
+
+2. Frontend listFinanceGoals(includeInactive) parameter is ignored.
+- API client always calls /api/expense/goals without active_only query.
+- Dashboard expecting active-only may include inactive goals.
+
+3. Bills/EMI UX mismatch.
+- Bills page submit path forces txn_type='expense', so true liability_payment recurring rules are not produced there.
+- Dashboard Add Bill allows selecting liability_payment, but UI does not collect liability_id, which backend requires when posting occurrence.
+- Result: liability_payment recurring flow is effectively incomplete.
+
+4. Goal allocations are backend-supported but no first-class frontend management flow is present.
+
+5. Dashboard home placeholders.
+- Main root dashboard still says habits/analytics are not implemented even though separate pages exist; this is a product cohesion gap.
+
+6. Migration strategy drift.
+- create_all startup path and SQL migration scripts define schema with different richness (constraints/indexes).
+
+---
+
+## 10) Concept Coverage vs Planning Docs
+
+Planning docs (plan.txt and NetWorthTracker.txt) describe a larger Life OS concept including:
+- sleep tracking
+- attendance
+- life calendar
+- broader journaling/media flows
+- achievements and advanced analytics
+
+Current shipped code focuses on:
+- Tasks (strong)
+- Finance/Net Worth (strong)
+- Habits (basic)
+- Notes (local-only)
+- Task analytics and finance reports (partial)
+
+So concept direction is clear and documented, while implementation is currently concentrated on productivity + finance core.
+
+---
+
+## 11) Practical Readiness Assessment
+
+### Good for now
+- Single-user local use on trusted machine/network.
+- Daily personal planning and personal finance tracking.
+
+### Not ready for public deployment
+- No auth, no user separation, no request controls.
+- Inconsistent migration enforcement.
+- Stale test scripts and partial feature wiring around recurring liability payments.
+
+---
+
+## 12) Recommended Next Build Sequence (from current code state)
+
+1. Security baseline
+- auth + user model + user scoping
+- pagination + rate limiting
+- CORS tightening
+
+2. Data integrity and migration cleanup
+- choose one migration source of truth (Alembic recommended)
+- align create_all vs migration schema definitions
+- remove/repair stale estimated_minutes scripts/tests
+
+3. Finance flow completion
+- complete liability_payment recurring UX (collect liability_id in bill forms)
+- wire goal allocation UX
+- add stricter finance validation
+
+4. Product cohesion
+- update root dashboard cards to reflect real module maturity
+- unify habits/analytics summaries into dashboard
+
+5. Testing maturity
+- add pytest backend API tests and deterministic DB fixtures
+- add frontend integration tests for critical flows (task CRUD, transaction CRUD, recurring posting)
+
+---
+
+## 13) Bottom Line
+The project already contains substantial and useful functionality, especially in tasks and finance.
+The largest risk is security and multi-user readiness, not feature scarcity.
+If this remains a local single-user app, it is already practical.
+If this moves to shared or internet-accessible use, security and tenant isolation must be implemented first.

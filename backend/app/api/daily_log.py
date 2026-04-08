@@ -12,9 +12,19 @@ from ..schemas.daily_log import DailyLogCreate, DailyLogOut, DailyLogUpdate, _co
 
 router = APIRouter(prefix="/daily-log", tags=["daily-log"])
 
+ALL_METRIC_FIELDS = [
+    "mood", "energy", "focus",
+    "productivity", "spending_control", "financial_mindfulness",
+    "discipline", "day_satisfaction",
+]
+
 
 def _to_out(log: DailyLog) -> DailyLogOut:
     return DailyLogOut.model_validate(log)
+
+
+def _recalc_score(log: DailyLog) -> None:
+    log.score = _compute_score(*[getattr(log, f) for f in ALL_METRIC_FIELDS])
 
 
 @router.get("", response_model=list[DailyLogOut])
@@ -39,30 +49,24 @@ def create_or_update_log(payload: DailyLogCreate, db: Session = Depends(get_db))
         select(DailyLog).where(DailyLog.log_date == payload.log_date)
     ).scalar_one_or_none()
 
-    score = _compute_score(payload.mood, payload.energy, payload.focus)
-
     if existing:
-        if payload.mood is not None:
-            existing.mood = payload.mood
-        if payload.energy is not None:
-            existing.energy = payload.energy
-        if payload.focus is not None:
-            existing.focus = payload.focus
+        for field in ALL_METRIC_FIELDS:
+            val = getattr(payload, field, None)
+            if val is not None:
+                setattr(existing, field, val)
         if payload.reflection is not None:
             existing.reflection = payload.reflection
-        existing.score = _compute_score(existing.mood, existing.energy, existing.focus)
+        _recalc_score(existing)
         db.commit()
         db.refresh(existing)
         return _to_out(existing)
 
     log = DailyLog(
         log_date=payload.log_date,
-        mood=payload.mood,
-        energy=payload.energy,
-        focus=payload.focus,
+        **{f: getattr(payload, f) for f in ALL_METRIC_FIELDS},
         reflection=payload.reflection,
-        score=score,
     )
+    _recalc_score(log)
     db.add(log)
     db.commit()
     db.refresh(log)
@@ -75,16 +79,14 @@ def update_log(log_id: int, payload: DailyLogUpdate, db: Session = Depends(get_d
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
 
-    if payload.mood is not None:
-        log.mood = payload.mood
-    if payload.energy is not None:
-        log.energy = payload.energy
-    if payload.focus is not None:
-        log.focus = payload.focus
+    for field in ALL_METRIC_FIELDS:
+        val = getattr(payload, field, None)
+        if val is not None:
+            setattr(log, field, val)
     if payload.reflection is not None:
         log.reflection = payload.reflection
 
-    log.score = _compute_score(log.mood, log.energy, log.focus)
+    _recalc_score(log)
     db.commit()
     db.refresh(log)
     return _to_out(log)

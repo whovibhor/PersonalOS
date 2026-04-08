@@ -6,23 +6,22 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DailyLogPage } from './pages/DailyLogPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { HabitsPage } from './pages/HabitsPage'
+import { LifeCalendarPage } from './pages/LifeCalendarPage'
 import { NotesPage } from './pages/NotesPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { SleepPage } from './pages/SleepPage'
 import { TodoPage } from './pages/TodoPage'
-import { ExpenseAssetsPage } from './pages/expense/ExpenseAssetsPage'
-import { ExpenseBillsPage } from './pages/expense/ExpenseBillsPage'
-import { ExpenseBudgetPage } from './pages/expense/ExpenseBudgetPage'
-import { ExpenseDashboardPage } from './pages/expense/ExpenseDashboardPage'
-import { ExpenseHistoryPage } from './pages/expense/ExpenseHistoryPage'
-import { ExpenseGoalsPage } from './pages/expense/ExpenseGoalsPage'
-import { ExpenseReportsPage } from './pages/expense/ExpenseReportsPage'
-import { ExpenseTransactionsPage } from './pages/expense/ExpenseTransactionsPage'
+import { WeeklyReflectionPage } from './pages/WeeklyReflectionPage'
+import { FinancePage } from './pages/finance/FinancePage'
+import { FinanceTransactionsPage } from './pages/finance/FinanceTransactionsPage'
+import { FinanceAnalyticsPage } from './pages/finance/FinanceAnalyticsPage'
+import { FinanceBudgetsPage } from './pages/finance/FinanceBudgetsPage'
+import { FinanceGoalsPage } from './pages/finance/FinanceGoalsPage'
+import { FinanceSubscriptionsPage } from './pages/finance/FinanceSubscriptionsPage'
+import { FinanceManagePage } from './pages/finance/FinanceManagePage'
 
 function App() {
   const [taskMutationTick, setTaskMutationTick] = useState(0)
-
-  // Kept for historical reasons: if we need to force-refresh pages on task mutations.
-  // Currently unused after removing the floating quick add button.
   void setTaskMutationTick
 
   return (
@@ -45,15 +44,17 @@ function App() {
           <Route path="/daily-log" element={<DailyLogPage />} />
           <Route path="/sleep" element={<SleepPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/calendar" element={<LifeCalendarPage />} />
+          <Route path="/reflection" element={<WeeklyReflectionPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
 
-          <Route path="/expense" element={<ExpenseDashboardPage />} />
-          <Route path="/expense/transactions" element={<ExpenseTransactionsPage />} />
-          <Route path="/expense/bills" element={<ExpenseBillsPage />} />
-          <Route path="/expense/assets" element={<ExpenseAssetsPage />} />
-          <Route path="/expense/budget" element={<ExpenseBudgetPage />} />
-          <Route path="/expense/goals" element={<ExpenseGoalsPage />} />
-          <Route path="/expense/reports" element={<ExpenseReportsPage />} />
-          <Route path="/expense/history" element={<ExpenseHistoryPage />} />
+          <Route path="/finance" element={<FinancePage />} />
+          <Route path="/finance/transactions" element={<FinanceTransactionsPage />} />
+          <Route path="/finance/analytics" element={<FinanceAnalyticsPage />} />
+          <Route path="/finance/budgets" element={<FinanceBudgetsPage />} />
+          <Route path="/finance/goals" element={<FinanceGoalsPage />} />
+          <Route path="/finance/subscriptions" element={<FinanceSubscriptionsPage />} />
+          <Route path="/finance/manage" element={<FinanceManagePage />} />
         </Route>
       </Routes>
     </BrowserRouter>

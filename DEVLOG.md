@@ -206,6 +206,148 @@ Frontend:
 
 ---
 
+## [2026-04-07] — Notes: Full Google Keep-Style Redesign
+
+**Feature:** Notes module — complete UI/UX redesign (Google Keep parity)
+
+**What was implemented:**
+
+Backend:
+- `backend/app/models/note.py` — Added 5 new columns: `note_type` (text/checklist), `checklist_items` (JSON Text), `color` (VARCHAR), `is_pinned` (Bool), `is_archived` (Bool)
+- `backend/app/main.py` — `_ensure_notes_schema()` additive migration: adds all 5 columns if missing on existing `notes` tables
+- `backend/app/schemas/note.py` — Updated NoteCreate/NoteUpdate/NoteOut to include all new fields; `from_orm_obj()` uses `getattr(..., default)` for backward compat
+- `backend/app/api/notes.py` — Updated `list_notes`: added `color`, `archived` query params; search now also searches `checklist_items`; result sorted pinned-first then updated_at desc; PATCH handles all new fields (`color=''` clears color)
+
+Frontend:
+- `frontend/src/lib/api.ts` — Updated `Note` type (added all 5 fields + `ChecklistItem`/`NoteType`); updated `listNotes(q, tag, color, archived)`, `NoteCreate`/`NoteUpdate`
+- `frontend/src/pages/NotesPage.tsx` — Full rewrite (Google Keep architecture):
+  - **Color system**: 12 colors (default + red/orange/yellow/green/teal/blue/indigo/purple/pink/brown/gray), each maps to dark-mode bg/border/dot CSS
+  - **Left sidebar**: label navigation (one button per unique label), Notes / Archive toggle
+  - **Top bar**: full-width search with clear button, grid/list view toggle
+  - **Color filter chips**: dot buttons for each color that exists in notes, click to filter
+  - **PINNED / OTHERS sections**: pinned notes float to top in their own section
+  - **Masonry layout**: CSS `columns-N` with `break-inside-avoid` on each card (1/2/3/4 cols by breakpoint)
+  - **Note cards**: color background, title, content preview (6-line clamp), checklist item preview (max 8), tag pills, pin badge; hover reveals action bar (pin, color picker, archive, delete)
+  - **Color picker**: 12-dot grid popover on card hover bar and inside editor
+  - **Quick-create bar**: "Take a note…" → opens text editor; checklist icon → opens checklist editor
+  - **Note editor modal**: backdrop blur overlay, color-matched background, pin toggle top-right, title + content/checklist editor, tag input, bottom toolbar (type toggle, color, label, delete, archive); autosave 1200ms debounce on all changes
+  - **Checklist editor**: unchecked items first, inline add (Enter), delete (Backspace on empty), checked items in separate "X checked" section with strikethrough
+  - **Archive**: separate view (triggered from sidebar or card action), unarchive supported
+
+**What is remaining (Keep features not built):**
+- Voice notes / image attachments
+- Drawings / freehand canvas
+- Reminder integration (needs notification engine first)
+- Real-time collaboration / sharing
+- Drag-and-drop reorder within card
+
+---
+
+## [2026-04-07] — Weekly Reflection + Backup + Attendance Stats + Notes Autosave
+
+**Feature:** Weekly Reflection module, Backup/Settings page, Attendance stats, Notes autosave
+
+**What was implemented:**
+
+Weekly Reflection:
+- `backend/app/models/weekly_reflection.py` — `weekly_reflections` table (year, week_number, went_well, didnt_go_well, improvements, highlight, gratitude; UniqueConstraint on year+week)
+- `backend/app/schemas/weekly_reflection.py` — Create/Update/Out schemas
+- `backend/app/api/weekly_reflection.py` — `GET /reflections`, `GET /reflections/this-week`, `POST /reflections` (upsert), `PATCH /{id}`, `DELETE /{id}`; `_current_iso_week()` helper
+- `frontend/src/lib/api.ts` — added `WeeklyReflection`, `WeeklyReflectionCreate`, `WeeklyReflectionUpdate` types + `listReflections`, `getThisWeekReflection`, `upsertReflection`, `updateReflection`, `deleteReflection`
+- `frontend/src/pages/WeeklyReflectionPage.tsx` — 5 prompts (went well, didn't go well, improvements, highlight, gratitude), ISO week date range display, save/update button, past reflections history panel, week number + date range computed client-side
+- Route `/reflection` + sidebar nav entry under DAILY LIFE
+
+Backup & Settings:
+- `backend/app/api/backup.py` — `GET /backup/export` dumps all tables to JSON (18 collections), returned as downloadable JSON response
+- `frontend/src/lib/api.ts` — `downloadBackup()` function (creates blob URL + triggers download)
+- `frontend/src/pages/SettingsPage.tsx` — Export button, file picker for import preview (parses JSON, shows per-table record counts), About section
+- Route `/settings` + sidebar nav entry under SYSTEM section
+
+Attendance stats (Daily Canvas):
+- `HabitsPage.tsx` AttendanceSection — now loads last 60 days instead of 3
+- Added `computeStats()`: monthly attendance % (present days / days elapsed this month), consecutive present streak
+- Stats shown in card header as "This month: X%" and "Streak: 🔥 Xd" (color-coded: green ≥80%, amber ≥60%, red <60%)
+- Streak refreshes after each mark action
+
+Notes autosave:
+- `NoteForm` now accepts `autoSave?: boolean` prop
+- When `autoSave=true`: 1.5s debounce effect on title/content/tags changes fires `onSubmit` silently
+- Status shown as "Autosaved HH:MM" / "Saving…" / "Autosave on"
+- Cancel button becomes "Close" in autosave mode (no manual Save button shown)
+- Edit modal passes `autoSave` prop; Create modal unchanged
+
+**What is remaining:**
+- Backup: `POST /backup/restore` endpoint (full DB restore from JSON)
+- Attendance: heatmap view
+- Reminders, Global Search modules (not started)
+
+**Status / Notes:**
+- `weekly_reflections` table auto-created on startup
+- ISO week uses Python's `date.isocalendar()` for accuracy (handles year-boundary correctly)
+- Autosave skips the first render via `isFirstRender` ref to avoid saving on modal open
+
+---
+
+## [2026-04-07] — Life Calendar + Analytics Rewrite + Finance Fixes
+
+**Feature:** Life Calendar, cross-module Analytics, Finance Goals/Bills fixes
+
+**What was implemented:**
+
+Life Calendar backend:
+- `backend/app/api/life_calendar.py` — `GET /api/life-calendar?year=YYYY`
+  - Aggregates `daily_logs` (score), `sleep_logs` (quality), `habit_logs` (done/total) per day
+  - Composite score = avg of (daily_score 0-100) + (sleep_quality 0-100) + (habit_pct 0-100) — only includes components that have data
+  - Returns full year as array of `CalendarDay` objects (one per day)
+- Registered in `router.py`
+
+Life Calendar frontend:
+- `frontend/src/lib/api.ts` — added `CalendarDay` type + `getLifeCalendar(year)`
+- `frontend/src/pages/LifeCalendarPage.tsx` — full-year grid (53 weeks × 7 days)
+  - Color: gray (no data) → red → amber → green → bright green
+  - Month labels above grid aligned by week column
+  - Click a day → inline detail panel (mood/energy/focus, sleep, habits done/total)
+  - Year navigation (prev/next)
+- Route `/calendar` added to `App.tsx`
+- "Life Calendar" added to sidebar under DAILY LIFE section
+
+Analytics rewrite:
+- `frontend/src/pages/AnalyticsPage.tsx` — full rewrite, now 3-tab layout: Tasks | Wellness | Finance
+  - Tasks tab: all existing stats (total/done/overdue/due today/due 7d/priority mix)
+  - Wellness tab: avg mood/energy/sleep stats, sparkline bar charts (last 30 days) for mood/energy/sleep, habit streaks per habit
+  - Finance tab: avg savings rate, monthly cashflow bar chart (last 6 months, income vs expense)
+  - All fetches parallelised: tasks + daily_logs(60) + sleep_logs(60) + habits + cashflow(6)
+  - Cards are content-fit (px-3 py-2), no fixed heights
+
+Finance fixes:
+- `ExpenseBillsPage.tsx` — full rewrite:
+  - `BillForm` extracted as shared component used by both Add and Edit modals
+  - Added "Bill type" dropdown: Regular Expense / EMI Liability Payment
+  - When EMI selected: liability picker appears, shows liability name + remaining balance
+  - `liability_id` correctly passed to backend when `txn_type === 'liability_payment'`
+  - Existing rules open with their real `txn_type` (no longer hardcoded to 'expense')
+  - Also loads `listFinanceLiabilities()` alongside assets on page mount
+- `ExpenseGoalsPage.tsx` — enhanced:
+  - Target date field in Add and Edit modals
+  - Goal card shows: days remaining (color-coded: red if overdue, amber if <30d)
+  - Estimated completion date (calculated from monthly savings rate since creation)
+  - Replaced quick-add buttons (+₹1k/+₹5k) with "Add funds" and "Withdraw" buttons → modal with amount input
+  - Progress bar turns bright green at 100%
+
+**What is remaining:**
+- Life Calendar: tasks done per day (requires task DB query by date — tasks use due_date not completed_at)
+- Analytics: habit completion heatmap calendar
+- Finance: goal allocation frontend (link asset → goal)
+- Weekly Reflection, Reminders, Global Search, Backup & Restore
+
+**Status / Notes:**
+- Life Calendar backend uses date range filtering (>= year_start, <= year_end) — works with MySQL
+- Composite score normalises 1-5 scale to 0-100: `(value - 1) / 4 * 100`
+- Bills page: old rules that were created as 'expense' still load correctly; new EMI rules pass the right txn_type
+- Goals: projected completion only shown when pct < 100 and at least 1 month of history exists
+
+---
+
 ## [SESSION TEMPLATE — copy this for each new session]
 
 <!--
@@ -232,11 +374,35 @@ Frontend:
 3. ~~**Daily Log Module**~~ ✓ Done
 4. ~~**Sleep Tracker Module**~~ ✓ Done
 5. ~~**Dashboard (Unified)**~~ ✓ Done
-6. **Finance UX Fixes** — Recurring liability EMI flow, goal allocation UI
+6. ~~**Finance UX Fixes**~~ ✓ Done (EMI liability picker, goal target date, add/withdraw funds)
 7. ~~**Attendance Module**~~ ✓ Done (inside Daily Canvas)
-8. **Life Calendar** — Aggregation API + full-year grid page
-9. **Analytics (Unified)** — Cross-module graphs (habits heatmap, sleep trend, mood timeline)
-10. **Weekly Reflection** — Prompted workflow
+8. ~~**Life Calendar**~~ ✓ Done (full-year grid, composite score, day detail)
+9. ~~**Analytics (Unified)**~~ ✓ Done (Tasks/Wellness/Finance tabs, sparklines, cashflow chart)
+10. ~~**Weekly Reflection**~~ ✓ Done (5-prompt form, history, backend upsert)
 11. **Reminders** — Browser notification engine
 12. **Global Search** — Ctrl+K palette
-13. **Backup & Restore** — Export/import JSON
+13. ~~**Backup & Restore**~~ ✓ Done (export full JSON; restore UI preview only)
+
+
+---
+
+## Session — Finance Module Complete Rebuild (2026-04-07)
+
+### What was done
+- **Removed** old Net Worth module (assets/liabilities/recurring bills model), replaced with student-focused Personal Finance Tracker
+- **Backend**: 6 new SQLAlchemy models (`fin_account`, `fin_category`, `fin_transaction`, `fin_budget`, `fin_goal`, `fin_subscription`)
+- **Backend**: Complete new API at `/api/finance/*` — all CRUD + dashboard + analytics (category spend, daily trend, smart insights)
+- **Backend**: Auto-seed 19 default categories on startup; balance auto-tracked on transaction mutations
+- **Frontend**: 7 new finance pages under `/finance/*` (Dashboard, Transactions, Analytics, Budgets, Goals, Subscriptions, Manage)
+- **Frontend**: api.ts fully rewritten — old finance types removed, new FinAccount/FinCategory/FinTransaction/etc types added
+- **Frontend**: AppShell nav updated — "Net Worth" replaced with full Finance section (7 sub-pages)
+- **Frontend**: App.tsx routes updated — old `/expense/*` routes replaced with `/finance/*`
+- **Frontend**: AnalyticsPage Finance tab updated to use new dashboard + category spend endpoints
+- **Frontend**: DashboardPage links updated from `/expense` to `/finance`
+- **Cleanup**: Old expense pages deleted, models `__init__.py` cleaned up, main.py simplified
+
+### Key architecture decisions
+- Balance tracking: `_apply_balance()` helper with direction=+1 (apply) / -1 (reverse) called on create/update/delete
+- Category spend: SQL GROUP BY category_id with JOIN for name/color/icon enrichment
+- Insights engine: MoM comparison, burn rate projection, top category, high-spend day (MySQL `DAYOFWEEK()`), budget alerts, subscription reminders
+- `daily_needed = (target - current) / days_left` — simple linear projection on goal deadline

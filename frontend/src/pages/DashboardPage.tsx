@@ -44,11 +44,11 @@ function KpiCard({
     return (
         <Link
             to={to}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-5 transition hover:border-zinc-700 hover:bg-zinc-900/30"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 transition hover:border-zinc-700 hover:bg-zinc-900/60"
         >
-            <div className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">{label}</div>
-            <div className={`mt-2 text-3xl font-bold ${accent ?? 'text-zinc-100'}`}>{value}</div>
-            {sub && <div className="mt-1 text-xs text-zinc-500">{sub}</div>}
+            <div className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">{label}</div>
+            <div className={`mt-2 text-2xl font-bold tabular-nums ${accent ?? 'text-zinc-100'}`}>{value}</div>
+            {sub && <div className="mt-1 text-xs text-zinc-600">{sub}</div>}
         </Link>
     )
 }
@@ -58,8 +58,8 @@ function KpiCard({
 function SectionHeader({ title, to }: { title: string; to: string }) {
     return (
         <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-zinc-200">{title}</div>
-            <Link to={to} className="text-xs text-zinc-500 hover:text-zinc-300 transition">
+            <div className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">{title}</div>
+            <Link to={to} className="text-xs text-zinc-600 hover:text-zinc-400 transition">
                 View all →
             </Link>
         </div>
@@ -262,15 +262,17 @@ export function DashboardPage() {
     }).format(state.finance.net_worth)
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             {/* Greeting */}
-            <div>
-                <div className="text-2xl font-bold text-zinc-100">{greet()}</div>
-                <div className="mt-0.5 text-sm text-zinc-500">{today()}</div>
+            <div className="flex items-end justify-between">
+                <div>
+                    <div className="text-2xl font-bold text-zinc-100">{greet()}</div>
+                    <div className="mt-0.5 text-sm text-zinc-500">{today()}</div>
+                </div>
             </div>
 
             {/* KPI strip */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <KpiCard
                     label="Tasks left"
                     value={state.tasks_pending + state.tasks_overdue}
@@ -293,7 +295,7 @@ export function DashboardPage() {
                             ? `Budget ${state.finance.budget_used_pct}% used`
                             : undefined
                     }
-                    to="/expense"
+                    to="/finance"
                 />
                 <KpiCard
                     label="Daily score"
@@ -312,15 +314,15 @@ export function DashboardPage() {
                 />
             </div>
 
-            {/* Main 2-col grid */}
-            <div className="grid gap-6 lg:grid-cols-2">
+            {/* Main 3-col grid: tasks | habits | wellness+bills */}
+            <div className="grid gap-5 lg:grid-cols-3">
 
                 {/* Tasks */}
                 <section className="space-y-3">
                     <SectionHeader title="Today's tasks" to="/todo" />
                     {state.tasks.length === 0 ? (
                         <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center text-sm text-zinc-500">
-                            All clear — no pending tasks 🎉
+                            All clear — no pending tasks
                         </div>
                     ) : (
                         state.tasks.map((t) => (
@@ -329,7 +331,7 @@ export function DashboardPage() {
                     )}
                     {state.tasks_pending + state.tasks_overdue > state.tasks.length && (
                         <Link to="/todo" className="block text-center text-xs text-zinc-500 hover:text-zinc-300 transition">
-                            + {state.tasks_pending + state.tasks_overdue - state.tasks.length} more tasks →
+                            + {state.tasks_pending + state.tasks_overdue - state.tasks.length} more →
                         </Link>
                     )}
                 </section>
@@ -349,88 +351,70 @@ export function DashboardPage() {
                     )}
                 </section>
 
-                {/* Bills due */}
-                <section className="space-y-3">
-                    <SectionHeader title="Bills due soon" to="/expense/bills" />
-                    {state.bills_due.length === 0 ? (
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center text-sm text-zinc-500">
-                            No bills due in the next 7 days.
-                        </div>
-                    ) : (
-                        state.bills_due.map((b) => <BillRow key={b.id} bill={b} />)
-                    )}
-                </section>
+                {/* Right column: Wellness + Bills */}
+                <section className="space-y-4">
+                    <div className="text-sm font-semibold text-zinc-200">Wellness & Finance</div>
 
-                {/* Wellness snapshot */}
-                <section className="space-y-3">
-                    <div className="text-sm font-semibold text-zinc-200">Wellness snapshot</div>
+                    {/* Wellness cards */}
                     <div className="grid grid-cols-2 gap-3">
-                        {/* Daily log */}
-                        <Link
-                            to="/habits"
-                            className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition hover:border-zinc-700"
-                        >
-                            <div className="text-xs text-zinc-500 uppercase tracking-wide">Today's mood</div>
-                            <div className="mt-2 text-2xl">
-                                {state.daily_log?.mood ? MOOD_EMOJI[state.daily_log.mood] : '—'}
+                        <Link to="/habits" className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 transition hover:border-zinc-700">
+                            <div className="text-xs text-zinc-500 uppercase tracking-wide">Mood</div>
+                            <div className="mt-1.5 text-xl">
+                                {state.daily_log?.mood ? MOOD_EMOJI[Math.min(5, Math.round(state.daily_log.mood / 2))] : '—'}
                             </div>
-                            <div className="mt-1 text-xs text-zinc-500">
-                                {state.daily_log
-                                    ? `Energy ${state.daily_log.energy ?? '?'} · Focus ${state.daily_log.focus ?? '?'}`
-                                    : 'Tap to log'}
+                            <div className="mt-0.5 text-xs text-zinc-600">
+                                {state.daily_log ? `Score ${state.daily_log.score?.toFixed(1) ?? '?'}/10` : 'Tap to log'}
                             </div>
                         </Link>
 
-                        {/* Sleep */}
-                        <Link
-                            to="/habits"
-                            className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition hover:border-zinc-700"
-                        >
-                            <div className="text-xs text-zinc-500 uppercase tracking-wide">Last sleep</div>
-                            <div className="mt-2 text-2xl">
+                        <Link to="/habits" className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 transition hover:border-zinc-700">
+                            <div className="text-xs text-zinc-500 uppercase tracking-wide">Sleep</div>
+                            <div className="mt-1.5 text-xl">
                                 {SLEEP_EMOJI(state.last_sleep?.hours_slept ?? null)}
                             </div>
-                            <div className="mt-1 text-xs text-zinc-500">
-                                {state.last_sleep
-                                    ? `${state.last_sleep.hours_slept ?? '?'}h · Quality ${state.last_sleep.quality ?? '?'}/5`
-                                    : 'Tap to log'}
+                            <div className="mt-0.5 text-xs text-zinc-600">
+                                {state.last_sleep ? `${state.last_sleep.hours_slept ?? '?'}h · Q${state.last_sleep.quality ?? '?'}` : 'Tap to log'}
                             </div>
                         </Link>
                     </div>
 
-                    {/* Finance row */}
-                    <Link
-                        to="/expense"
-                        className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 transition hover:border-zinc-700"
-                    >
+                    {/* Finance */}
+                    <Link to="/finance"
+                        className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 transition hover:border-zinc-700">
                         <div>
                             <div className="text-xs text-zinc-500 uppercase tracking-wide">This month</div>
-                            <div className="mt-0.5 text-sm text-zinc-200">
-                                Spent{' '}
-                                <span className="font-semibold text-zinc-100">
-                                    ₹{state.finance.expenses_this_month.toLocaleString('en-IN')}
-                                </span>
+                            <div className="mt-0.5 text-sm font-semibold text-zinc-100">
+                                ₹{state.finance.expenses_this_month.toLocaleString('en-IN')}
                                 {state.finance.budget_total && (
-                                    <span className="text-zinc-500">
-                                        {' '}/ ₹{state.finance.budget_total.toLocaleString('en-IN')} budget
+                                    <span className="text-xs font-normal text-zinc-500">
+                                        {' '}/ ₹{state.finance.budget_total.toLocaleString('en-IN')}
                                     </span>
                                 )}
                             </div>
                         </div>
                         {state.finance.budget_used_pct !== null && (
-                            <div
-                                className={`text-sm font-bold ${
-                                    state.finance.budget_used_pct >= 90
-                                        ? 'text-red-400'
-                                        : state.finance.budget_used_pct >= 70
-                                        ? 'text-yellow-400'
-                                        : 'text-emerald-400'
-                                }`}
-                            >
+                            <div className={`text-sm font-bold ${
+                                state.finance.budget_used_pct >= 90 ? 'text-red-400'
+                                : state.finance.budget_used_pct >= 70 ? 'text-yellow-400'
+                                : 'text-emerald-400'
+                            }`}>
                                 {state.finance.budget_used_pct}%
                             </div>
                         )}
                     </Link>
+
+                    {/* Bills */}
+                    {state.bills_due.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">Bills due soon</div>
+                            {state.bills_due.slice(0, 3).map((b) => <BillRow key={b.id} bill={b} />)}
+                            {state.bills_due.length > 3 && (
+                                <Link to="/finance/subscriptions" className="block text-center text-xs text-zinc-600 hover:text-zinc-400 transition">
+                                    +{state.bills_due.length - 3} more →
+                                </Link>
+                            )}
+                        </div>
+                    )}
                 </section>
             </div>
         </div>

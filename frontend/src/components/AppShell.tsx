@@ -40,7 +40,7 @@ type AppShellProps = {
 
 export function AppShell({ variant }: AppShellProps) {
     const location = useLocation()
-    const inExpenseModule = location.pathname === '/expense' || location.pathname.startsWith('/expense/')
+    const inFinanceModule = location.pathname === '/finance' || location.pathname.startsWith('/finance/')
 
     return (
         <div className="flex min-h-dvh flex-col bg-zinc-950 text-zinc-50">
@@ -52,10 +52,10 @@ export function AppShell({ variant }: AppShellProps) {
                         {variant === 'dashboard' ? (
                             <div className="rounded-full border border-zinc-800 bg-zinc-900/20 p-1">
                                 <div className="flex items-center gap-1">
-                                    <HeaderNavItem to="/todo" label="To‑Do" end />
+                                    <HeaderNavItem to="/todo" label="To-Do" end />
                                     <HeaderNavItem to="/habits" label="Daily" end />
                                     <HeaderNavItem to="/notes" label="Notes" end />
-                                    <HeaderNavItem to="/expense" label="Net Worth" end />
+                                    <HeaderNavItem to="/finance" label="Finance" end />
                                     <HeaderNavItem to="/analytics" label="Analytics" end />
                                 </div>
                             </div>
@@ -63,10 +63,10 @@ export function AppShell({ variant }: AppShellProps) {
                             <div className="rounded-full border border-zinc-800 bg-zinc-900/20 p-1">
                                 <div className="flex items-center gap-1">
                                     <HeaderNavItem to="/" label="Dashboard" end />
-                                    <HeaderNavItem to="/todo" label="To‑Do" end />
+                                    <HeaderNavItem to="/todo" label="To-Do" end />
                                     <HeaderNavItem to="/habits" label="Daily" end />
                                     <HeaderNavItem to="/notes" label="Notes" end />
-                                    <HeaderNavItem to="/expense" label="Net Worth" end />
+                                    <HeaderNavItem to="/finance" label="Finance" end />
                                     <HeaderNavItem to="/analytics" label="Analytics" end />
                                 </div>
                             </div>
@@ -81,27 +81,36 @@ export function AppShell({ variant }: AppShellProps) {
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
                             <NavItem to="/" label="Dashboard" end />
                             <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">PRODUCTIVITY</div>
-                            <NavItem to="/todo" label="To‑Do" />
+                            <NavItem to="/todo" label="To-Do" />
                             <NavItem to="/notes" label="Notes" />
                             <NavItem to="/analytics" label="Analytics" />
                             <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">DAILY LIFE</div>
                             <NavItem to="/habits" label="Daily Canvas" />
+                            <NavItem to="/calendar" label="Life Calendar" />
+                            <NavItem to="/reflection" label="Weekly Reflection" />
                             <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">FINANCE</div>
-                            <NavItem to="/expense" label="Net Worth" />
+                            <NavItem to="/finance" label="Overview" end />
+                            <NavItem to="/finance/transactions" label="Transactions" end />
+                            <NavItem to="/finance/analytics" label="Analytics" end />
+                            <NavItem to="/finance/budgets" label="Budgets" end />
+                            <NavItem to="/finance/goals" label="Goals" end />
+                            <NavItem to="/finance/subscriptions" label="Subscriptions" end />
+                            <NavItem to="/finance/manage" label="Manage" end />
+                            <div className="my-1 px-3 pt-3 pb-1 text-xs font-semibold tracking-widest text-zinc-600">SYSTEM</div>
+                            <NavItem to="/settings" label="Settings & Backup" />
                         </div>
                     </aside>
-                ) : variant === 'page' && inExpenseModule ? (
+                ) : variant === 'page' && inFinanceModule ? (
                     <aside className="hidden w-56 shrink-0 md:block">
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 p-3">
-                            <div className="px-3 pb-2 text-xs font-semibold tracking-widest text-zinc-600">NET WORTH</div>
-                            <NavItem to="/expense" label="Dashboard" end />
-                            <NavItem to="/expense/transactions" label="Transactions" end />
-                            <NavItem to="/expense/bills" label="Bills" end />
-                            <NavItem to="/expense/assets" label="Assets & Debts" end />
-                            <NavItem to="/expense/budget" label="Budget" end />
-                            <NavItem to="/expense/goals" label="Goals" end />
-                            <NavItem to="/expense/reports" label="Reports" end />
-                            <NavItem to="/expense/history" label="History" end />
+                            <div className="px-3 pb-2 text-xs font-semibold tracking-widest text-zinc-600">FINANCE</div>
+                            <NavItem to="/finance" label="Overview" end />
+                            <NavItem to="/finance/transactions" label="Transactions" end />
+                            <NavItem to="/finance/analytics" label="Analytics" end />
+                            <NavItem to="/finance/budgets" label="Budgets" end />
+                            <NavItem to="/finance/goals" label="Goals" end />
+                            <NavItem to="/finance/subscriptions" label="Subscriptions" end />
+                            <NavItem to="/finance/manage" label="Manage" end />
                         </div>
                     </aside>
                 ) : null}

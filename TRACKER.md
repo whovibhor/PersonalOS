@@ -77,9 +77,9 @@
 
 ## Module 3 — Notes
 
-**Description:** Personal notes with tags and search. Backend-persisted (not localStorage).
+**Description:** Personal notes with tags, color, pin, archive, checklist — Google Keep-style UI.
 
-**Overall Status:** `[~]` In Progress (localStorage skeleton exists, no backend)
+**Overall Status:** `[x]` Completed (Google Keep-style)
 
 ### User Flow
 1. User opens Notes page
@@ -98,67 +98,45 @@
 - `[x]` Search by keyword (title + content)
 - `[x]` Filter by tag
 - `[x]` Edit note (modal)
-- `[ ]` Autosave on edit
+- `[x]` Autosave on edit (1.5s debounce)
+- `[x]` Checklist note type (items with check/uncheck, reorder, auto-move checked)
+- `[x]` Color-coded cards (12 colors — red/orange/yellow/green/teal/blue/indigo/purple/pink/brown/gray/default)
+- `[x]` Pin notes (pinned section always at top)
+- `[x]` Archive notes (separate archived view)
+- `[x]` Grid / list view toggle
+- `[x]` Color filter chips
+- `[x]` Label sidebar navigation
+- `[x]` Hover action bar on cards (pin, color, archive, delete)
 
 ---
 
-## Module 4 — Finance
+## Module 4 — Finance (Student-focused Personal Finance Tracker)
 
-**Description:** Full personal finance management — assets, liabilities, transactions, budgets, goals, recurring bills.
+**Description:** Rebuilt from scratch — fast expense entry, categories with icons/colors, budgets with alerts, analytics with smart insights, subscription tracker, goals with daily savings needed.
 
-**Overall Status:** `[x]` Completed (core) — some UX gaps
+**Overall Status:** `[x]` Completed (full rebuild)
 
-### Sub-features / Components
+### Backend
+- `[x]` Models: FinAccount, FinCategory, FinTransaction, FinBudget, FinGoal, FinSubscription
+- `[x]` Auto-seed 19 default categories on startup
+- `[x]` Accounts CRUD (bank/cash/upi/wallet, balance tracking)
+- `[x]` Categories CRUD (with color + lucide icon name)
+- `[x]` Transactions CRUD (income/expense, category, account, payment method, date)
+- `[x]` Balance auto-update on transaction create/edit/delete
+- `[x]` Budgets upsert (total + per-category, spent/pct computed live)
+- `[x]` Goals CRUD + add-funds endpoint (pct, days_left, daily_needed computed)
+- `[x]` Subscriptions CRUD (monthly/weekly/yearly, days_until, monthly_equivalent)
+- `[x]` Dashboard endpoint (total_balance, today/month stats, accounts, recent txns)
+- `[x]` Analytics: category spend, daily trend, smart insights (MoM, burn rate, budget alerts)
 
-#### Assets & Liabilities
-- `[x]` Add/edit/delete assets (bank, investment, property, etc.)
-- `[x]` Add/edit/delete liabilities (loans, credit cards, EMIs)
-- `[x]` Set primary account
-- `[x]` Net worth calculation
-- `[ ]` Archive / close account flow
-- `[ ]` Opening balance history
-
-#### Transactions
-- `[x]` Add income / expense / transfer / payment transactions
-- `[x]` Edit / delete transactions
-- `[x]` Tag transactions
-- `[x]` Payment mode tracking
-- `[x]` Export transactions (CSV/JSON)
-- `[ ]` Advanced filters (by account, payment mode, date presets)
-- `[ ]` Bulk edit / delete
-- `[ ]` Import CSV with field mapping
-
-#### Recurring Bills
-- `[x]` Create recurring rules (daily / weekly / monthly)
-- `[x]` Post occurrences manually
-- `[x]` Auto-create toggle
-- `[ ]` Liability selection in bill creation / edit screen (EMI flow)
-- `[ ]` Full EMI workflow (link recurring payment to liability, reduce outstanding)
-
-#### Budgets
-- `[x]` Monthly budget
-- `[x]` Category budgets
-- `[x]` Budget vs actual view
-- `[ ]` Budget rollover logic
-- `[ ]` Category overrun alerts
-- `[ ]` Budget forecast
-
-#### Goals
-- `[x]` Create / edit / delete goals
-- `[x]` Progress updates
-- `[x]` Goal allocation backend
-- `[ ]` Goal allocation frontend UI
-- `[ ]` Projected completion timeline
-- `[ ]` Target strategy suggestions
-
-#### Reports & Dashboard
-- `[x]` Finance KPI dashboard
-- `[x]` Cashflow chart
-- `[x]` Tag spend breakdown
-- `[x]` Audit history log (before/after)
-- `[x]` Export reports
-- `[ ]` Trend alerts / overspend warnings
-- `[ ]` Anomaly detection ("what changed this month")
+### Frontend
+- `[x]` Finance Dashboard (/finance) — balance hero, accounts, recent txns, quick add
+- `[x]` Transactions page (/finance/transactions) — grouped by day, search, type filter, delete
+- `[x]` Analytics page (/finance/analytics) — category bars, daily trend chart, insights cards
+- `[x]` Budgets page (/finance/budgets) — monthly nav, total + category budgets with progress bars
+- `[x]` Goals page (/finance/goals) — color-coded cards, daily needed, add funds modal
+- `[x]` Subscriptions page (/finance/subscriptions) — urgency color, days until, monthly total
+- `[x]` Manage page (/finance/manage) — accounts + categories CRUD, seed defaults button
 
 ---
 
@@ -228,33 +206,33 @@
 - `[x]` `POST /attendance` — upsert today
 - `[x]` `GET /attendance` — list history
 - `[x]` Attendance UI (toggle + reason, embedded in Daily Canvas)
-- `[ ]` Monthly attendance %
-- `[ ]` Attendance streak
+- `[x]` Monthly attendance % (computed from last 60 days)
+- `[x]` Attendance streak (consecutive present days)
 - `[ ]` Heatmap view
 
 ---
 
 ## Module 8 — Life Calendar
 
-**Description:** One-cell-per-day visual calendar. Each cell shows a composite daily score based on tasks, habits, mood, sleep.
+**Description:** One-cell-per-day visual calendar. Each cell shows a composite daily score based on habits, mood, sleep.
 
-**Overall Status:** `[ ]` Not Started
+**Overall Status:** `[x]` Completed (core)
 
 ### User Flow
 1. User opens Life Calendar
 2. Sees a full-year grid (one block per day)
 3. Each block colored by daily composite score
-4. Clicks a day → drawer shows: tasks done, habits done, sleep, mood, spend, notes
+4. Clicks a day → inline panel shows: mood/energy/focus, sleep hours+quality, habits done/total
 5. Can navigate to previous years
 
 ### Sub-features / Components
-- `[ ]` `GET /life-calendar?year=YYYY` — aggregate day scores from all modules
-- `[ ]` Day score formula: (task % + habit % + mood + sleep quality) / 4
-- `[ ]` Life Calendar page (full-year grid)
-- `[ ]` Color scale (green → red based on score)
-- `[ ]` Day detail drawer (click a day)
-- `[ ]` Cross-module data aggregation per day
-- `[ ]` Year navigation
+- `[x]` `GET /life-calendar?year=YYYY` — aggregate day scores from daily_logs, sleep_logs, habit_logs
+- `[x]` Day score formula: avg of (daily_score normalised, sleep_quality normalised, habit_pct) → 0-100
+- `[x]` Life Calendar page (full-year grid, 53 weeks × 7 days)
+- `[x]` Color scale (gray=no data, red→amber→green based on score)
+- `[x]` Day detail panel (click a day, shows wellness + sleep + habits)
+- `[x]` Cross-module data aggregation per day
+- `[x]` Year navigation (prev/next year buttons)
 
 ---
 
@@ -282,23 +260,23 @@
 
 ## Module 10 — Analytics (Unified)
 
-**Description:** Cross-module analytics: mood vs tasks, sleep vs focus, spend trends, habit streaks heatmap.
+**Description:** Cross-module analytics: tasks, mood/energy/sleep trends, habit streaks, cashflow.
 
-**Overall Status:** `[~]` In Progress (task analytics only)
+**Overall Status:** `[x]` Completed (core — tabbed: Tasks / Wellness / Finance)
 
 ### Sub-features / Components
 - `[x]` Task completion rate
 - `[x]` Task priority distribution
 - `[x]` Task overdue stats
-- `[ ]` Habit streak heatmap
-- `[ ]` Habit consistency % over time
-- `[ ]` Sleep quality trend graph
-- `[ ]` Mood timeline graph
+- `[x]` Mood timeline sparkline (last 30 days)
+- `[x]` Energy timeline sparkline (last 30 days)
+- `[x]` Sleep hours trend sparkline (last 30 days)
+- `[x]` Habit streak & total completions per habit
+- `[x]` Monthly cashflow bar chart (last 6 months)
+- `[x]` Avg savings rate over period
+- `[ ]` Habit completion heatmap calendar
 - `[ ]` Mood vs productivity correlation
 - `[ ]` Sleep vs task completion correlation
-- `[ ]` Expense trend graph
-- `[ ]` Weekly efficiency score
-- `[ ]` Monthly discipline score
 
 ---
 
@@ -337,13 +315,13 @@
 
 **Description:** Full data export as JSON. Restore from backup file. Prevents data loss.
 
-**Overall Status:** `[ ]` Not Started
+**Overall Status:** `[~]` In Progress (export done, restore TBD)
 
 ### Sub-features / Components
-- `[ ]` `GET /backup/export` — full JSON dump of all tables
-- `[ ]` `POST /backup/restore` — import JSON and repopulate
-- `[ ]` Export button in Settings
-- `[ ]` Import file picker in Settings
+- `[x]` `GET /backup/export` — full JSON dump of all tables (tasks, habits, notes, finance, sleep, reflections, attendance)
+- `[x]` Export button in Settings page (downloads dated .json file)
+- `[x]` Import file picker — parses file, previews record counts
+- `[ ]` `POST /backup/restore` — import JSON and repopulate DB
 - `[ ]` Conflict resolution on restore (overwrite / merge option)
 
 ---
@@ -352,12 +330,13 @@
 
 **Description:** Prompted Sunday workflow: what went well, what to improve, highlights.
 
-**Overall Status:** `[ ]` Not Started
+**Overall Status:** `[x]` Completed (core)
 
 ### Sub-features / Components
-- `[ ]` `weekly_reflections` table (week_number, year, went_well, didnt_go_well, improvements, highlight)
-- `[ ]` `POST /reflections` and `GET /reflections`
-- `[ ]` Weekly reflection page / modal
+- `[x]` `weekly_reflections` table (year, week_number, went_well, didnt_go_well, improvements, highlight, gratitude)
+- `[x]` `POST /reflections` (upsert by year+week), `GET /reflections`, `GET /reflections/this-week`, `PATCH`, `DELETE`
+- `[x]` Weekly Reflection page (/reflection) — 5 prompts (went well, didn't go well, improvements, highlight, gratitude)
+- `[x]` Save/update button, past reflections history toggle
 - `[ ]` Auto-prompt on Sunday
 - `[ ]` Link to week's tasks, habits, mood summary
 

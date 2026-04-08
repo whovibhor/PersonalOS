@@ -15,17 +15,24 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 def list_notes(
     q: str | None = Query(default=None, description="Search title and content"),
     tag: str | None = Query(default=None, description="Filter by tag"),
+    color: str | None = Query(default=None, description="Filter by color"),
+    archived: bool = Query(default=False, description="Show archived notes"),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Note).order_by(Note.updated_at.desc())
+    stmt = select(Note).where(Note.is_archived == archived)
 
     if q:
         like = f"%{q}%"
-        stmt = stmt.where(or_(Note.title.ilike(like), Note.content.ilike(like)))
+        stmt = stmt.where(or_(Note.title.ilike(like), Note.content.ilike(like), Note.checklist_items.ilike(like)))
 
     if tag:
-        # Tags are stored as comma-separated; simple LIKE match is sufficient for local use
         stmt = stmt.where(Note.tags.ilike(f"%{tag.strip()}%"))
+
+    if color:
+        stmt = stmt.where(Note.color == color)
+
+    # Pinned notes first, then by updated_at desc
+    stmt = stmt.order_by(Note.is_pinned.desc(), Note.updated_at.desc())
 
     notes = db.execute(stmt).scalars().all()
     return [NoteOut.from_orm_obj(n) for n in notes]
@@ -37,6 +44,11 @@ def create_note(payload: NoteCreate, db: Session = Depends(get_db)):
         title=payload.title.strip(),
         content=payload.content.strip(),
         tags=_tags_to_str(payload.tags),
+        note_type=payload.note_type or "text",
+        checklist_items=payload.checklist_items,
+        color=payload.color,
+        is_pinned=payload.is_pinned,
+        is_archived=payload.is_archived,
     )
     db.add(note)
     db.commit()
@@ -64,6 +76,17 @@ def update_note(note_id: int, payload: NoteUpdate, db: Session = Depends(get_db)
         note.content = payload.content.strip()
     if payload.tags is not None:
         note.tags = _tags_to_str(payload.tags)
+    if payload.note_type is not None:
+        note.note_type = payload.note_type
+    if payload.checklist_items is not None:
+        note.checklist_items = payload.checklist_items
+    if payload.color is not None:
+        # Allow clearing color by passing empty string
+        note.color = payload.color if payload.color else None
+    if payload.is_pinned is not None:
+        note.is_pinned = payload.is_pinned
+    if payload.is_archived is not None:
+        note.is_archived = payload.is_archived
 
     db.commit()
     db.refresh(note)
